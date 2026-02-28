@@ -206,11 +206,11 @@
                         
                         <div class="grid grid-cols-2 gap-2 mb-4 relative z-10">
                             <div class="bg-slate-900/80 p-2 rounded-xl border border-slate-700 text-center">
-                                <div class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">調査権</div>
+                                <div class="text-[11px] text-slate-500 uppercase tracking-widest font-bold mb-1">調査権</div>
                                 <div id="questions-count" class="text-2xl font-black text-amber-500">3/3</div>
                             </div>
                             <div class="bg-slate-900/80 p-2 rounded-xl border border-slate-700 text-center flex flex-col items-center justify-center">
-                                <div class="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">直感</div>
+                                <div class="text-[11px] text-slate-500 uppercase tracking-widest font-bold mb-1">直感</div>
                                 <div id="intuition-badge" class="text-[9px] font-bold mt-1 px-2 py-0.5 rounded-full inline-block">READY</div>
                             </div>
                         </div>
@@ -224,12 +224,12 @@
                     </div>
 
                     <div>
-                        <h2 class="text-xs mb-1 font-bold text-slate-500 uppercase tracking-widest">📜 状況記録</h2>
-                        <div id="public-log" class="log-container h-[160px] text-xs leading-relaxed"></div>
+                        <h2 class="text-s mb-1 font-bold text-slate-500 uppercase tracking-widest">📜 状況記録</h2>
+                        <div id="public-log" class="log-container h-[160px] text-s leading-relaxed"></div>
                     </div>
 
                     <div id="god-log-area" class="hidden">
-                        <h2 class="text-xs mb-1 font-bold text-amber-600 uppercase tracking-widest">⚡ 真実の記録 (神視点)</h2>
+                        <h2 class="text-s mb-1 font-bold text-amber-600 uppercase tracking-widest">⚡ 真実の記録 (神視点)</h2>
                         <div id="god-log-container" class="log-container h-[120px] border-amber-900/50 bg-black/40 text-[9px]"></div>
                     </div>
                 </div>
@@ -729,7 +729,7 @@
                     } else {
                         ti.textContent = "容疑者のアイコンをクリックして選択してください。";
                     }
-                    btnArea.appendChild(createButton('追放フェーズへ進む', () => { state.questionsLeft = 0; state.isConferenceMode = true; updateUI(); }, 'bg-slate-700 text-xs py-2 opacity-70 mt-4'));
+                    btnArea.appendChild(createButton('追放フェーズへ進む', () => { state.questionsLeft = 0; state.isConferenceMode = true; updateUI(); }, 'bg-slate-700 text-s py-2 opacity-70 mt-4'));
                 } else {
                     ti.textContent = "誰か一人を追放しますか？それとも様子を見ますか？慎重に決断してください。";
                     if (state.selectedNpcId !== null) {
