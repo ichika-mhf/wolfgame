@@ -79,7 +79,7 @@
         .dead { opacity: 0.5; filter: grayscale(1) brightness(0.5); background: #000 !important; cursor: default; }
         .dead-stamp {
             position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg);
-            font-weight: bold; font-size: 2rem; color: #ef4444; border: 4px solid #ef4444;
+            font-weight: bold; font-size: 2rem; color: #f50707; border: 4px solid #f50707;
             padding: 0px 10px; opacity: 0; transition: opacity 0.5s ease-in; z-index: 20; pointer-events: none;
             background: rgba(0,0,0,0.5);
         }
@@ -158,7 +158,7 @@
                 <p>● あなたの役目は【探偵】です。【人狼】を特定し、追放すれば勝利。全滅させられると敗北です。</p>
                 <p>● 住民たちから1日3回まで証言を聞くことができます。</p>
                 <p>● 市民は嘘をつけませんが、【人狼】や【第三勢力】は嘘の証言をすることがあります。</p>
-                <p>● 探偵の切り札「直感」はゲーム中一度だけ。対象の真の姿を暴きます。</p>
+                <p>● 探偵の切り札「直感」はゲーム中1度だけ。対象の真の姿を暴きます。</p>
             </div>
             <button onclick="startGame()" class="w-full py-5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-2xl transition-colors shadow-lg text-xl relative z-10">準備は整った</button>
         </div>
@@ -253,7 +253,7 @@
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <span class="text-amber-500 font-bold">捜査官</span>
-                        <p class="text-slate-400 text-sm mt-1">選んだ人物のロールが正解と不正解の2種類提示される。人狼かどうかはわからない。</p>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物のロールが2種類提示される。どちらが正解か、また人狼かどうかはわからない。</p>
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <span class="text-amber-500 font-bold">ハッカー</span>
@@ -285,7 +285,7 @@
                 <p id="modal-body" class="text-slate-200 whitespace-pre-wrap leading-relaxed mt-6 text-lg"></p>
                 <div id="modal-reveal-area" class="mt-8 min-h-[80px]"></div>
             </div>
-            <button id="modal-close-btn" class="w-full py-5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-2xl transition-all shadow-lg text-xl">了解した</button>
+            <button id="modal-close-btn" class="w-full py-5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-2xl transition-all shadow-lg text-xl">OK</button>
         </div>
     </div>
 
@@ -441,108 +441,134 @@
                 actions.push({ actor: npc, target: target, action: type });
             });
 
-            // 1. ハッカー
+            // --- 1. ハッカー（外出禁止） ---
             const blocked = new Set();
             actions.filter(a => a.actor.perceivedRoll === ROLLS.HACKER && a.action === 'ROLL').forEach(a => {
-                if (!blocked.has(a.actor.id)) {
-                    if (a.actor.actualRoll === ROLLS.HACKER) { 
-                        blocked.add(a.target.id); 
-                        addGodLog(`HACK: ${a.actor.name} → ${a.target.name} (SUCCESS)`); 
-                    } else {
-                        addGodLog(`HACK: ${a.actor.name} → ${a.target.name} (FAIL - SAKUGOSHA)`);
-                    }
-                } else {
-                    addGodLog(`HACK: ${a.actor.name} (BLOCKED BY OTHER HACKER)`);
+                if (a.actor.actualRoll === ROLLS.HACKER) { 
+                    // 後でガード判定を行うため、ここでは「試行」として記録
+                    a.success = true;
                 }
             });
 
-            // 2. 警備員
-            const guards = actions.filter(a => a.actor.perceivedRoll === ROLLS.KEIBI && a.action === 'ROLL' && !blocked.has(a.actor.id)).map(a => {
+            // --- 2. 警備員（部屋監視） ---
+            const activeGuards = new Map(); // targetId -> actorId
+            actions.filter(a => a.actor.perceivedRoll === ROLLS.KEIBI && a.action === 'ROLL').forEach(a => {
                 if (a.actor.actualRoll === ROLLS.KEIBI) {
-                    addGodLog(`GUARD: ${a.actor.name} → ${a.target.name} (ACTIVE)`);
-                    return a.target.id;
-                } else {
-                    addGodLog(`GUARD: ${a.actor.name} → ${a.target.name} (FAIL - SAKUGOSHA)`);
-                    return -1;
+                    // ハッカーに封じられていないかチェック（ハッカーのターゲットが自分）
+                    const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === a.actor.id && h.success);
+                    if (hackerA) {
+                        addGodLog(`GUARD: ${a.actor.name} (FAILED - BLOCKED BY HACKER)`);
+                    } else {
+                        activeGuards.set(a.target.id, a.actor.id);
+                        addGodLog(`GUARD: ${a.actor.name} → ${a.target.name} (WATCHING ROOM)`);
+                    }
                 }
             });
 
-            // 3. 人狼の襲撃
+            // --- 3. 殺害フェーズ（ドミノ式解除ロジック） ---
             let deaths = new Set();
-            const wolfA = actions.find(a => a.actor.side === SIDE.JINRO && a.action === 'KILL');
-            if (wolfA) {
-                if (blocked.has(wolfA.actor.id)) {
-                    addGodLog(`WOLF KILL: ${wolfA.actor.name} (FAILED - BLOCKED BY HACKER)`);
-                } else if (guards.includes(wolfA.target.id)) {
-                    addGodLog(`WOLF KILL: ${wolfA.actor.name} → ${wolfA.target.name} (FAILED - GUARDED)`);
-                } else {
-                    deaths.add(wolfA.target.id);
-                    addGodLog(`WOLF KILL: ${wolfA.actor.name} → ${wolfA.target.name} (SUCCESS)`);
-                }
-            }
 
-            // 4. 医者
+            // 殺害者のリスト（優先順位順）
+            const killers = [
+                ...actions.filter(a => a.actor.side === SIDE.JINRO && a.action === 'KILL'), // 人狼
+                ...actions.filter(a => a.actor.actualRoll === ROLLS.SATSujIN),              // 殺人鬼
+                ...actions.filter(a => a.actor.actualRoll === ROLLS.KAITOU)               // 怪盗
+            ];
+
+            killers.forEach(k => {
+                if (deaths.has(k.actor.id)) {
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} (FAILED - ALREADY KILLED)`);
+                    return;
+                }
+                // ハッカーに封じられていないか
+                const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === k.actor.id && h.success);
+                if (hackerA) {
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} (FAILED - BLOCKED BY HACKER)`);
+                    return;
+                }
+
+                // ガードされているか
+                if (activeGuards.has(k.target.id)) {
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} → ${k.target.name} (FAILED - ROOM GUARDED)`);
+                } else {
+                    deaths.add(k.target.id);
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} → ${k.target.name} (SUCCESS)`);
+                    
+                    // 【重要】もし殺害されたのが警備員だった場合、その警備員が守っていたガードを即座に解除
+                    for (let [tId, aId] of activeGuards) {
+                        if (aId === k.target.id) {
+                            activeGuards.delete(tId);
+                            addGodLog(`GUARD VOID: ${state.npcs[aId].name} KILLED, ROOM ${state.npcs[tId].name} NOW UNPROTECTED`);
+                        }
+                    }
+
+                    // 怪盗の特殊処理
+                    if (k.actor.actualRoll === ROLLS.KAITOU) {
+                        const t = k.target;
+                        setTimeout(() => { k.actor.side = t.side; k.actor.actualRoll = t.actualRoll; k.actor.perceivedRoll = t.perceivedRoll; if (k.actor.side === SIDE.SHIMIN) k.actor.claimedRoll = k.actor.perceivedRoll; }, 0);
+                    }
+                }
+            });
+
+            // --- 4. 医者（蘇生） ---
             actions.filter(a => a.actor.perceivedRoll === ROLLS.ISHA && a.action === 'ROLL').forEach(a => { 
-                if (blocked.has(a.actor.id)) {
-                    addGodLog(`DOCTOR HEAL: ${a.actor.name} (FAILED - BLOCKED BY HACKER)`);
-                } else if (deaths.has(a.actor.id)) {
-                    addGodLog(`DOCTOR HEAL: ${a.actor.name} (FAILED - KILLED BY WEREWOLF)`);
+                const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === a.actor.id && h.success);
+                if (hackerA || deaths.has(a.actor.id)) {
+                    addGodLog(`DOCTOR HEAL: ${a.actor.name} (FAILED)`);
                 } else {
                     if (deaths.has(a.target.id) && a.actor.actualRoll === ROLLS.ISHA) {
                         deaths.delete(a.target.id); 
+                        a.actor.lastResult = "SUCCESS";
                         addGodLog(`DOCTOR HEAL: ${a.actor.name} → ${a.target.name} (SUCCESS)`);
-                    } else if (deaths.has(a.target.id)) {
-                        addGodLog(`DOCTOR HEAL: ${a.actor.name} → ${a.target.name} (FAIL - SAKUGOSHA)`);
                     } else {
                         addGodLog(`DOCTOR HEAL: ${a.actor.name} → ${a.target.name} (NO TARGET)`);
                     }
                 }
             });
 
-            // 5. 殺人鬼・怪盗
-            const killerActions = actions.filter(a => a.actor.actualRoll === ROLLS.SATSujIN);
-            killerActions.forEach(a => { 
-                if (!blocked.has(a.actor.id) && !guards.includes(a.target.id)) {
-                    deaths.add(a.target.id); 
-                    addGodLog(`KILLER: ${a.actor.name} → ${a.target.name} (SUCCESS)`);
+            // --- 5. 調査系能力の確定（ガード対象には効かない） ---
+            // ハッカー
+            actions.filter(a => a.actor.perceivedRoll === ROLLS.HACKER && a.action === 'ROLL' && a.success).forEach(a => {
+                if (deaths.has(a.actor.id)) return;
+                if (activeGuards.has(a.target.id)) {
+                    a.success = false; // ガードされた
+                    a.actor.lastResult = "GUARDED";
+                    addGodLog(`HACK: ${a.actor.name} → ${a.target.name} (FAILED - ROOM GUARDED)`);
                 } else {
-                    addGodLog(`KILLER: ${a.actor.name} → ${a.target.name} (FAILED)`);
-                }
-            });
-            actions.filter(a => a.actor.actualRoll === ROLLS.KAITOU).forEach(a => {
-                if (!blocked.has(a.actor.id)) {
-                    deaths.add(a.target.id); const t = a.target;
-                    addGodLog(`THIEF: ${a.actor.name} → ${a.target.name} (STOLE ${t.actualRoll})`);
-                    setTimeout(() => { a.actor.side = t.side; a.actor.actualRoll = t.actualRoll; a.actor.perceivedRoll = t.perceivedRoll; if (a.actor.side === SIDE.SHIMIN) a.actor.claimedRoll = a.actor.perceivedRoll; }, 0);
-                } else {
-                    addGodLog(`THIEF: ${a.actor.name} (FAILED - BLOCKED)`);
+                    blocked.add(a.target.id);
+                    a.actor.lastResult = "SUCCESS";
+                    addGodLog(`HACK: ${a.actor.name} → ${a.target.name} (SUCCESS)`);
                 }
             });
 
-            // 6. 結果の確定
+            // 結果の確定
             state.nightlyDeaths = Array.from(deaths);
             actions.forEach(a => {
-                if (a.actor.lastResult) return;
-                if (deaths.has(a.actor.id)) {
+                if (a.actor.lastResult && a.actor.lastResult !== "SUCCESS" && a.actor.lastResult !== "GUARDED") return;
+                
+                // state.nightlyDeathsに含まれる＝その夜最終的に死亡した人物
+                if (state.nightlyDeaths.includes(a.actor.id)) {
                     a.actor.lastResult = "襲撃を受け、行動不能になりました。";
-                    addGodLog(`INVESTIGATION: ${a.actor.name} (CANCELLED - KILLED)`);
                     return;
                 }
-                if (blocked.has(a.actor.id)) { 
-                    a.actor.lastResult = "妨害されました。"; 
+                const isBlocked = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === a.actor.id && h.success);
+                if (isBlocked) { 
+                    a.actor.lastResult = "何者かに妨害されました。"; 
                     return; 
-                }
-                if (a.action !== 'ROLL') {
-                    a.actor.lastResult = "殺害を実行しました。";
-                    return;
                 }
 
                 const isReal = a.actor.actualRoll === a.actor.perceivedRoll;
+                // ガード対象への調査失敗判定
+                if (['捜査官', '目撃者', 'ハッカー'].includes(a.actor.perceivedRoll) && activeGuards.has(a.target.id)) {
+                    a.actor.lastResult = "部屋の守りが固く、何も情報を得られませんでした。";
+                    addGodLog(`${a.actor.perceivedRoll}: ${a.actor.name} → ${a.target.name} (FAILED - GUARDED)`);
+                    return;
+                }
+
                 if (a.actor.perceivedRoll === ROLLS.KEIBI) {
-                    const attackOnTarget = (wolfA && wolfA.target.id === a.target.id && !blocked.has(wolfA.actor.id)) ||
-                                           killerActions.some(ka => ka.target.id === a.target.id && !blocked.has(ka.actor.id));
-                    a.actor.lastResult = (attackOnTarget && isReal) ? `${a.target.name}さんを襲来した影から守り切りました。` : "異常なし。";
-                    addGodLog(`GUARD RESULT: ${a.actor.name} → ${a.target.name} (${a.actor.lastResult})`);
+                    const wasTargetAttackedOrInterfered = actions.some(x => x.target.id === a.target.id && x.actor.id !== a.actor.id);
+                    a.actor.lastResult = (wasTargetAttackedOrInterfered && isReal) ? `${a.target.name}さんの部屋に近づく影を、暗闇の中で追い払いました。` : "異常なし。";
+                    addGodLog(`KEIBI: ${a.actor.name} → ${a.target.name} (DONE)`);
                 } else if (a.actor.perceivedRoll === ROLLS.SOUSA) {
                     if (a.actor.investigationCache[a.target.id]) {
                         a.actor.lastResult = a.actor.investigationCache[a.target.id];
@@ -560,12 +586,12 @@
                         a.actor.lastResult = `調査の結果、役職は「${c1}」か「${c2}」のようです。`;
                         a.actor.investigationCache[a.target.id] = a.actor.lastResult;
                     }
-                    addGodLog(`SOUSA RESULT: ${a.actor.name} → ${a.target.name} (${a.actor.lastResult})`);
+                    addGodLog(`SOUSA: ${a.actor.name} → ${a.target.name} (DONE)`);
                 } else if (a.actor.perceivedRoll === ROLLS.MOKUGEKI) {
                     const v = actions.find(x => x.target.id === a.target.id && x.actor.id !== a.actor.id);
                     a.actor.lastResult = (isReal) ? (v ? `${v.actor.name}さんの侵入を目撃。` : "誰も現れませんでした。") : (Math.random() > 0.5 ? "不審な人影を目撃しました。" : "誰も現れませんでした。");
-                    addGodLog(`MOKUGEKI RESULT: ${a.actor.name} → ${a.target.name} (${a.actor.lastResult})`);
-                } else {
+                    addGodLog(`MOKUGEKI: ${a.actor.name} → ${a.target.name} (DONE)`);
+                } else if (!a.actor.lastResult) {
                     a.actor.lastResult = "異常なし。";
                 }
             });
@@ -598,8 +624,11 @@
                 let targetNpc = state.npcs[m.targetId];
                 let line = `\n・${m.day}日目：${m.target}さんの部屋へ行きました。`;
                 let detail = "";
-                if (m.result.includes("行動不能")) { detail = "その夜、私は襲撃を受けてしまいました..."; }
-                else if (claimed === ROLLS.SOUSA) {
+                
+                // 行動不能や妨害の結果を最優先で反映
+                if (m.result.includes("行動不能") || m.result.includes("身動きが取れず")) {
+                    detail = m.result;
+                } else if (claimed === ROLLS.SOUSA) {
                     if (npc.investigationCache[targetNpc.id]) { detail = npc.investigationCache[targetNpc.id]; }
                     else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) { 
                         detail = m.result; npc.investigationCache[targetNpc.id] = detail;
@@ -612,10 +641,18 @@
                     }
                 } else if (claimed === ROLLS.MOKUGEKI) {
                     detail = (npc.actualRoll === ROLLS.MOKUGEKI && m.wasRealRoleAction) ? m.result : (targetNpc.isDead ? "何者かが侵入するのを見ました！" : "誰も現れませんでした。");
-                } else if (claimed === ROLLS.HACKER) { detail = "端末にハッキングを行いました。"; }
-                else if (claimed === ROLLS.KEIBI || claimed === ROLLS.ISHA) {
-                    detail = (npc.actualRoll === claimed && m.wasRealRoleAction) ? m.result : (targetNpc.isDead ? "妨害されました。" : "特に異常はありませんでした。");
-                } else { detail = "特に変わったことは起きませんでしたよ。"; }
+                } else if (claimed === ROLLS.HACKER) {
+                    detail = (m.result === "異常なし。" || m.result.includes("SUCCESS")) ? "端末を操作し、ハッキングを行いました。" : m.result;
+                } else if (claimed === ROLLS.ISHA) {
+                    if (m.result.includes("SUCCESS")) {
+                        detail = `${targetNpc.name}さんは息絶えそうでしたが、私の応急処置で一命を取り留めました。`;
+                    } else {
+                        detail = (m.result === "異常なし。") ? `${targetNpc.name}さんの往診に向かいました。特に異常は見られませんでした。` : m.result;
+                    }
+                } else {
+                    // 警備員などは既に具体的な「守りきった」等の結果が入っているためそのまま反映
+                    detail = m.result;
+                }
                 log += line + detail;
             });
             return intro + log;
