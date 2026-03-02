@@ -185,7 +185,7 @@
                 <!-- 左メイン: ADVエリア -->
                 <div class="flex flex-col min-h-[450px]">
                     <div class="flex-1">
-                        <h2 class="text-lg mb-3 font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">🏠 館の住人</h2>
+                        <h2 class="text-lg mb-3 font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">🏠館の住人</h2>
                         <div id="npc-list" class="grid grid-cols-4 gap-3 mb-4"></div>
                     </div>
 
@@ -249,11 +249,11 @@
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <span class="text-amber-500 font-bold">🤪 錯誤者</span>
-                        <p class="text-slate-400 text-sm mt-1">自分を何らかの役職だと思い込んで行動しているが実際には何の効果もない。</p>
+                        <p class="text-slate-400 text-sm mt-1">自分を何らかのロールだと思い込んで行動しているが実際には何の効果もない。</p>
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <span class="text-amber-500 font-bold">🔍 捜査官</span>
-                        <p class="text-slate-400 text-sm mt-1">選んだ人物の役職が2種類提示される。どちらが正解か、また人狼かどうかはわからない。</p>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物のロールが2種類提示される。どちらが正解か、また人狼かどうかはわからない。</p>
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <span class="text-amber-500 font-bold">💻 ハッカー</span>
@@ -269,7 +269,7 @@
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <span class="text-amber-500 font-bold">🎭 怪盗</span>
-                        <p class="text-slate-400 text-sm mt-1">人狼含め、他者を殺害できる。対象の勢力と役職を奪う。</p>
+                        <p class="text-slate-400 text-sm mt-1">人狼含め、他者を殺害できる。対象の勢力とロールを奪う。</p>
                     </div>
                 </div>
             </section>
@@ -625,13 +625,18 @@
                 let line = `\n・${m.day}日目：${m.target}さんの部屋へ行きました。`;
                 let detail = "";
                 
+                // 内部フラグの日本語化
+                let resultText = m.result;
+                if (resultText === "GUARDED") resultText = "部屋の守りが固く、何も情報を得られませんでした。";
+                if (resultText === "SUCCESS" && claimed === ROLLS.HACKER) resultText = "端末を操作し、ハッキングを行いました。";
+
                 // 行動不能や妨害の結果を最優先で反映
-                if (m.result.includes("行動不能") || m.result.includes("身動きが取れず")) {
-                    detail = m.result;
+                if (resultText.includes("行動不能") || resultText.includes("妨害されました") || resultText.includes("身動きが取れず")) {
+                    detail = resultText;
                 } else if (claimed === ROLLS.SOUSA) {
                     if (npc.investigationCache[targetNpc.id]) { detail = npc.investigationCache[targetNpc.id]; }
                     else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) { 
-                        detail = m.result; npc.investigationCache[targetNpc.id] = detail;
+                        detail = resultText; npc.investigationCache[targetNpc.id] = detail;
                     } else {
                         const roles = Object.values(ROLLS).filter(r => r !== ROLLS.SAKUGOSHA);
                         const c1 = targetNpc.claimedRoll;
@@ -640,18 +645,17 @@
                         npc.investigationCache[targetNpc.id] = detail;
                     }
                 } else if (claimed === ROLLS.MOKUGEKI) {
-                    detail = (npc.actualRoll === ROLLS.MOKUGEKI && m.wasRealRoleAction) ? m.result : (targetNpc.isDead ? "何者かが侵入するのを見ました！" : "誰も現れませんでした。");
+                    detail = (npc.actualRoll === ROLLS.MOKUGEKI && m.wasRealRoleAction) ? resultText : (targetNpc.isDead ? "何者かが侵入するのを見ました！" : "誰も現れませんでした。");
                 } else if (claimed === ROLLS.HACKER) {
-                    detail = (m.result === "異常なし。" || m.result.includes("SUCCESS")) ? "端末を操作し、ハッキングを行いました。" : m.result;
+                    detail = (resultText === "異常なし。" || resultText === "SUCCESS") ? "端末を操作し、ハッキングを行いました。" : resultText;
                 } else if (claimed === ROLLS.ISHA) {
-                    if (m.result.includes("SUCCESS")) {
-                        detail = `${targetNpc.name}さんは息絶えそうでしたが、私の応急処置で一命を取り留めました。`;
+                    if (resultText === "SUCCESS") {
+                        detail = `息絶えそうでしたが、私の応急処置で一命を取り留めました。`;
                     } else {
-                        detail = (m.result === "異常なし。") ? `${targetNpc.name}さんの往診に向かいました。特に異常は見られませんでした。` : m.result;
+                        detail = (resultText === "異常なし。") ? `診察を行いましたが、特に異常は見られませんでした。` : resultText;
                     }
                 } else {
-                    // 警備員などは既に具体的な「守りきった」等の結果が入っているためそのまま反映
-                    detail = m.result;
+                    detail = resultText;
                 }
                 log += line + detail;
             });
@@ -829,7 +833,4 @@
         function closeModal() { document.getElementById('modal').classList.add('hidden'); }
     </script>
 </body>
-
 </html>
-
-
