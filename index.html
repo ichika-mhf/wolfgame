@@ -77,6 +77,9 @@
         }
 
         .dead { opacity: 0.5; filter: grayscale(1) brightness(0.5); background: #000 !important; cursor: default; }
+        /* ゲーム終了時は死亡者のフィルターを解除して正体を見やすくする */
+        #npc-list.game-over .dead { filter: none; opacity: 0.8; background: var(--card-bg) !important; }
+        
         .dead-stamp {
             position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg);
             font-weight: bold; font-size: 2rem; color: #f50707; border: 4px solid #f50707;
@@ -500,23 +503,24 @@
             ];
 
             killers.forEach(k => {
+                const killerLabel = k.actor.side === SIDE.JINRO ? 'WOLF' : k.actor.actualRoll;
                 if (deaths.has(k.actor.id)) {
-                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} (FAILED - ALREADY KILLED)`);
+                    addGodLog(`${killerLabel}: ${k.actor.name} (FAILED - ALREADY KILLED)`);
                     return;
                 }
                 // ハッカーに封じられていないか
                 const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === k.actor.id && h.success);
                 if (hackerA) {
-                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} (FAILED - BLOCKED BY HACKER)`);
+                    addGodLog(`${killerLabel}: ${k.actor.name} (FAILED - BLOCKED BY HACKER)`);
                     return;
                 }
 
                 // ガードされているか
                 if (activeGuards.has(k.target.id)) {
-                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} → ${k.target.name} (FAILED - ROOM GUARDED)`);
+                    addGodLog(`${killerLabel}: ${k.actor.name} → ${k.target.name} (FAILED - ROOM GUARDED)`);
                 } else {
                     deaths.add(k.target.id);
-                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} → ${k.target.name} (SUCCESS)`);
+                    addGodLog(`${killerLabel}: ${k.actor.name} → ${k.target.name} (SUCCESS)`);
                     
                     // 【重要】もし殺害されたのが警備員だった場合、その警備員が守っていたガードを即座に解除
                     for (let [tId, aId] of activeGuards) {
@@ -570,7 +574,6 @@
             actions.forEach(a => {
                 if (a.actor.lastResult && a.actor.lastResult !== "SUCCESS" && a.actor.lastResult !== "GUARDED") return;
                 
-                // state.nightlyDeathsに含まれる＝その夜最終的に死亡した人物
                 if (state.nightlyDeaths.includes(a.actor.id)) {
                     a.actor.lastResult = "襲撃を受け、行動不能になりました。";
                     return;
@@ -580,10 +583,12 @@
                     a.actor.lastResult = "何者かに妨害されました。"; 
                     return; 
                 }
-
+                if (a.action === 'KILL') {
+                    a.actor.lastResult = "特に怪しい点はありませんでした。";
+                    return;
+                }
                 const isReal = a.actor.actualRoll === a.actor.perceivedRoll;
-                // ガード対象への調査失敗判定
-                if (['捜査官', '目撃者', 'ハッカー'].includes(a.actor.perceivedRoll) && activeGuards.has(a.target.id)) {
+                if (['🔍 捜査官', '💻 ハッカー', '👁️ 目撃者'].includes(a.actor.perceivedRoll) && activeGuards.has(a.target.id)) {
                     a.actor.lastResult = "部屋の守りが固く、何も情報を得られませんでした。";
                     addGodLog(`${a.actor.perceivedRoll}: ${a.actor.name} → ${a.target.name} (FAILED - GUARDED)`);
                     return;
@@ -626,18 +631,15 @@
         function goToMorning() {
             state.phase = 'MORNING';
             updateUI();
+            const processMorningResult = () => { if (!checkGameEnd()) { state.phase = 'DAY'; state.questionsLeft = 3; updateUI(); } };
             if (state.nightlyDeaths.length > 0) {
                 let b = "";
-                state.nightlyDeaths.forEach(id => {
-                    const v = state.npcs[id]; b += `▼ 犠牲者：${v.name}\n役職：${v.actualRoll}\n\n`;
-                    addPublicLog(`${v.name}の遺体が発見されました。（役職：${v.actualRoll}）`);
-                });
-                showModal("惨劇の朝", b);
+                state.nightlyDeaths.forEach(id => { const v = state.npcs[id]; b += `▼ 犠牲者：${v.name}\n役職：${v.actualRoll}\n\n`; addPublicLog(`${v.name}の遺体が発見されました。（役職：${v.actualRoll}）`); });
+                showModal("惨劇の朝", b, false, null, processMorningResult);
             } else {
-                showModal("平穏な朝", "犠牲者はいませんでした。館の守りは固いようです。");
                 addPublicLog("犠牲者はなし。");
+                showModal("平穏な朝", "犠牲者はいませんでした。館の守りは固いようです。", false, null, processMorningResult);
             }
-            if (!checkGameEnd()) { state.phase = 'DAY'; state.questionsLeft = 3; updateUI(); }
         }
 
         function generateTestimony(npc) {
@@ -648,20 +650,15 @@
                 let targetNpc = state.npcs[m.targetId];
                 let line = `\n・${m.day}日目：${m.target}さんの部屋へ行きました。`;
                 let detail = "";
-                
-                // 内部フラグの日本語化
                 let resultText = m.result;
                 if (resultText === "GUARDED") resultText = "部屋の守りが固く、何も情報を得られませんでした。";
                 if (resultText === "SUCCESS" && claimed === ROLLS.HACKER) resultText = "端末を操作し、ハッキングを行いました。";
-
-                // 行動不能や妨害の結果を最優先で反映
                 if (resultText.includes("行動不能") || resultText.includes("妨害されました") || resultText.includes("身動きが取れず")) {
                     detail = resultText;
                 } else if (claimed === ROLLS.SOUSA) {
                     if (npc.investigationCache[targetNpc.id]) { detail = npc.investigationCache[targetNpc.id]; }
-                    else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) { 
-                        detail = resultText; npc.investigationCache[targetNpc.id] = detail;
-                    } else {
+                    else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) { detail = resultText; npc.investigationCache[targetNpc.id] = detail; }
+                    else {
                         const roles = Object.values(ROLLS).filter(r => r !== ROLLS.SAKUGOSHA);
                         const c1 = targetNpc.claimedRoll;
                         const c2 = roles.filter(r => r !== c1)[Math.floor(Math.random() * (roles.length-1))];
@@ -673,117 +670,76 @@
                 } else if (claimed === ROLLS.HACKER) {
                     detail = (resultText === "異常なし。" || resultText === "SUCCESS") ? "端末を操作し、ハッキングを行いました。" : resultText;
                 } else if (claimed === ROLLS.ISHA) {
-                    if (resultText === "SUCCESS") {
-                        detail = `息絶えそうでしたが、私の応急処置で一命を取り留めました。`;
-                    } else {
-                        detail = (resultText === "異常なし。") ? `診察を行いましたが、特に異常は見られませんでした。` : resultText;
-                    }
-                } else {
-                    detail = resultText;
-                }
+                    if (resultText === "SUCCESS") { detail = `息絶えそうでしたが、私の応急処置で一命を取り留めました。`; }
+                    else { detail = (resultText === "異常なし。") ? `診察を行いましたが、特に異常は見られませんでした。` : resultText; }
+                } else { detail = resultText; }
                 log += line + detail;
             });
             return intro + log;
         }
 
-        function askNPC(id) {
-            if (state.questionsLeft <= 0 || state.npcs[id].isDead) return;
-            const npc = state.npcs[id];
-            state.questionsLeft--;
-            addDialogueLog(npc, generateTestimony(npc));
-            if (state.questionsLeft === 0) state.isConferenceMode = true;
-            updateUI();
-        }
-
-        function useIntuition(id) {
-            if (state.usedIntuition || state.npcs[id].isDead) return;
-            state.usedIntuition = true;
-            const n = state.npcs[id];
-            showModal("探偵の直感", `${n.name}の正体を暴いた。\n\n【勢力】${n.side}\n【真の役職】${n.actualRoll}`);
-            updateUI();
-        }
-
-        function exileNPC(id) {
-            if (id === null) {
-                showModal("審判", "本日は誰も追放せず、様子を見ることにしました。", true);
-                addPublicLog("誰も追放しませんでした。");
-            } else {
-                const v = state.npcs[id]; v.isDead = true;
-                addPublicLog(`${v.name}を追放しました。`);
-                showModal("審判の瞬間", `${v.name}を追放。その正体は...`, true, v);
-            }
-        }
-
+        function askNPC(id) { if (state.questionsLeft <= 0 || state.npcs[id].isDead) return; const npc = state.npcs[id]; state.questionsLeft--; addDialogueLog(npc, generateTestimony(npc)); if (state.questionsLeft === 0) state.isConferenceMode = true; updateUI(); }
+        function useIntuition(id) { if (state.usedIntuition || state.npcs[id].isDead) return; state.usedIntuition = true; const n = state.npcs[id]; showModal("探偵の直感", `${n.name}の正体を暴いた。\n\n【勢力】${n.side}\n【真の役職】${n.actualRoll}`); updateUI(); }
+        function exileNPC(id) { if (id === null) { showModal("審判", "本日は誰も追放せず、様子を見ることにしました。", true); addPublicLog("誰も追放しませんでした。"); } else { const v = state.npcs[id]; v.isDead = true; addPublicLog(`${v.name}を追放しました。`); showModal("審判の瞬間", `${v.name}を追放。その正体は...`, true, v); } }
         function checkGameEnd() {
             const alive = state.npcs.filter(n => !n.isDead);
             const wolfA = alive.some(n => n.side === SIDE.JINRO);
             const killerA = alive.some(n => n.actualRoll === ROLLS.SATSujIN || (n.actualRoll === ROLLS.KAITOU && n.side === SIDE.THIRD));
             if (!wolfA && !killerA) { endGame("【勝利】館から全ての脅威が消え去りました。"); return true; }
-            if (alive.length <= 2) {
-                endGame(wolfA ? "【敗北】人狼に支配されました。" : "【敗北】殺人鬼だけが残りました。");
-                return true;
-            }
+            if (alive.length <= 2) { endGame(wolfA ? "【敗北】人狼に支配されました。" : "【敗北】殺人鬼だけが残りました。"); return true; }
             return false;
         }
-
-        function endGame(msg) { state.isGameOver = true; showModal("終局", msg); updateUI(); }
+        function endGame(msg) { 
+            state.isGameOver = true; 
+            state.godMode = true; // 全NPCの正体を公開
+            
+            // 会話ウィンドウをリセット
+            const speechBubble = document.getElementById('latest-speech-bubble');
+            speechBubble.innerHTML = `<div class="text-amber-500 font-bold text-center py-8 text-xl">―― 全ての捜査が終了しました ――</div>`;
+            
+            // 状況記録に最終結果を追記
+            addPublicLog(msg);
+            
+            updateUI(); 
+            showModal("終局", msg + "\n\n館の住人たちの正体が明かされました。"); 
+        }
 
         function updateUI() {
-            // NPCリスト
             const listEl = document.getElementById('npc-list');
             listEl.innerHTML = '';
+            if (state.isGameOver) listEl.classList.add('game-over');
             state.npcs.forEach(npc => {
                 const card = document.createElement('div');
                 card.className = `npc-card ${npc.isDead ? 'dead' : ''} ${state.selectedNpcId === npc.id ? 'selected' : ''}`;
                 card.onclick = () => { if(!npc.isDead) { state.selectedNpcId = npc.id; updateUI(); } };
-                
                 let gi = '';
                 if (state.godMode) {
                     const bc = npc.side === SIDE.JINRO ? 'bg-red-900' : (npc.side === SIDE.THIRD ? 'bg-purple-900' : 'bg-blue-900');
                     gi = `<div class="absolute top-0 left-0 text-[10px] ${bc} text-white px-2 py-0.5 rounded-br-lg z-20 font-bold">${npc.actualRoll}</div>`;
                 }
-                
-                const roleInfo = npc.isDead ? `<div class="text-[10px] text-red-400 font-bold mt-1 uppercase tracking-tighter">${npc.actualRoll}</div>` : '';
-
-                card.innerHTML = `
-                    ${gi}
-                    <div class="dead-stamp">OUT</div>
-                    <img src="${npc.image}" alt="${npc.name}">
-                    <span class="font-bold text-sm text-slate-300">${npc.name}</span>
-                    ${roleInfo}
-                `;
+                const roleInfo = (npc.isDead && !state.isGameOver) ? `<div class="text-[10px] text-red-400 font-bold mt-1 uppercase tracking-tighter">${npc.actualRoll}</div>` : '';
+                card.innerHTML = `${gi}<div class="dead-stamp">OUT</div><img src="${npc.image}" alt="${npc.name}"><span class="font-bold text-sm text-slate-300">${npc.name}</span>${roleInfo}`;
                 listEl.appendChild(card);
             });
-
             // 最新の発言 (ADV形式)
             const speechBubble = document.getElementById('latest-speech-bubble');
-            if (state.dialogueLogs.length > 0) {
+            if (state.isGameOver) {
+                speechBubble.innerHTML = `<div class="text-amber-500 font-bold text-center py-8 text-xl">―― 全ての捜査が終了しました ――</div>`;
+            } else if (state.dialogueLogs.length > 0) {
                 const last = state.dialogueLogs[state.dialogueLogs.length - 1];
-                speechBubble.innerHTML = `
-                    <div class="speech-name-tag">${last.name}</div>
-                    <div class="flex gap-4">
-                        <div class="flex-1">
-                            <div class="text-slate-200 text-lg leading-relaxed whitespace-pre-wrap font-medium">${last.msg}</div>
-                            <div class="text-[10px] text-slate-500 mt-4 italic text-right">${last.day}日目の証言</div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                speechBubble.innerHTML = `<div class="text-slate-500 italic text-center py-8">容疑者を選択して、詳細を調査してください。</div>`;
+                speechBubble.innerHTML = `<div class="speech-name-tag">${last.name}</div><div class="flex gap-4"><div class="flex-1"><div class="text-slate-200 text-lg leading-relaxed whitespace-pre-wrap font-medium">${last.msg}</div><div class="text-[10px] text-slate-500 mt-4 italic text-right">${last.day}日目の証言</div></div></div>`;
+            } else { 
+                speechBubble.innerHTML = `<div class="text-slate-500 italic text-center py-8">容疑者を選択して、詳細を調査してください。</div>`; 
             }
-
-            // 操作パネル
             document.getElementById('questions-count').textContent = `${state.questionsLeft}/3`;
             const ib = document.getElementById('intuition-badge');
             ib.textContent = state.usedIntuition ? 'USED' : 'READY';
             ib.className = `text-[10px] font-bold mt-1 px-3 py-1 rounded-full ${state.usedIntuition ? 'bg-slate-700 text-slate-500' : 'bg-purple-900 text-purple-300'}`;
             document.getElementById('game-status').textContent = `${state.day}日目 ${getPhaseName()}`;
-            
             const btnArea = document.getElementById('action-buttons');
             btnArea.innerHTML = '';
             const ti = document.getElementById('turn-info');
             if (state.isGameOver) { btnArea.appendChild(createButton('最初からプレイする', () => location.reload(), 'bg-amber-600 py-4 text-lg')); return; }
-            
             if (state.phase === 'DAY') {
                 if (!state.isConferenceMode) {
                     ti.textContent = "容疑者を選択し、質問または直感で正体を探ってください。残りの質問回数に注意しましょう。";
@@ -791,18 +747,12 @@
                         const t = state.npcs[state.selectedNpcId];
                         btnArea.appendChild(createButton(`${t.name}に詳細を問う`, () => askNPC(t.id), 'bg-amber-700 py-3 text-base'));
                         if (!state.usedIntuition) btnArea.appendChild(createButton(`${t.name}の正体を暴く (直感)`, () => useIntuition(t.id), 'bg-purple-800 py-3 text-base'));
-                    } else {
-                        ti.textContent = "容疑者のアイコンをクリックして選択してください。";
-                    }
+                    } else { ti.textContent = "容疑者のアイコンをクリックして選択してください。"; }
                     btnArea.appendChild(createButton('追放フェーズへ進む', () => { state.questionsLeft = 0; state.isConferenceMode = true; updateUI(); }, 'bg-slate-700 text-s py-2 opacity-70 mt-4'));
                 } else {
                     ti.textContent = "誰か一人を追放しますか？それとも様子を見ますか？慎重に決断してください。";
-                    if (state.selectedNpcId !== null) {
-                        const t = state.npcs[state.selectedNpcId];
-                        btnArea.appendChild(createButton(`${t.name}を館から追放する`, () => exileNPC(t.id), 'bg-red-800 py-4 text-base'));
-                    } else {
-                        ti.textContent = "追放する人物を選択してください。";
-                    }
+                    if (state.selectedNpcId !== null) { const t = state.npcs[state.selectedNpcId]; btnArea.appendChild(createButton(`${t.name}を館から追放する`, () => exileNPC(t.id), 'bg-red-800 py-4 text-base')); }
+                    else { ti.textContent = "追放する人物を選択してください。"; }
                     btnArea.appendChild(createButton('様子を見る（追放しない）', () => exileNPC(null), 'bg-slate-700 py-4 text-base'));
                 }
             } else { ti.textContent = "夜の闇が明けるのを待っています..."; }
@@ -810,10 +760,7 @@
 
         function renderHistory() {
             const historyEl = document.getElementById('dialogue-log-history');
-            if (state.dialogueLogs.length === 0) {
-                historyEl.innerHTML = '<div class="text-slate-600 text-center mt-10 italic text-xl">まだ記録された証言はありません</div>';
-                return;
-            }
+            if (state.dialogueLogs.length === 0) { historyEl.innerHTML = '<div class="text-slate-600 text-center mt-10 italic text-xl">まだ記録された証言はありません</div>'; return; }
             historyEl.innerHTML = [...state.dialogueLogs].reverse().map(log => `
                 <div class="bg-slate-800/50 p-5 rounded-2xl border border-slate-700">
                     <div class="flex items-center gap-3 mb-2">
@@ -826,16 +773,10 @@
             `).join('');
         }
 
-        function createButton(txt, click, cls) {
-            const b = document.createElement('button');
-            b.className = `btn-action w-full rounded-2xl font-bold text-white transition-all ${cls}`;
-            b.innerHTML = txt; b.onclick = (e) => { e.stopPropagation(); click(); };
-            return b;
-        }
-
+        function createButton(txt, click, cls) { const b = document.createElement('button'); b.className = `btn-action w-full rounded-2xl font-bold text-white transition-all ${cls}`; b.innerHTML = txt; b.onclick = (e) => { e.stopPropagation(); click(); }; return b; }
         function getPhaseName() { switch(state.phase) { case 'NIGHT': return '🌙 夜'; case 'MORNING': return '☀️ 朝'; case 'DAY': return '☀️ 昼'; default: return ''; } }
 
-        function showModal(title, body, nextNight = false, victim = null) {
+        function showModal(title, body, nextNight = false, victim = null, callback = null) {
             document.getElementById('modal-title').textContent = title;
             document.getElementById('modal-body').textContent = body;
             const reveal = document.getElementById('modal-reveal-area');
@@ -843,14 +784,9 @@
             reveal.innerHTML = ''; imgC.innerHTML = '';
             if (victim) {
                 imgC.innerHTML = `<img src="${victim.image}" class="w-24 h-24 rounded-full border-4 border-amber-500 mb-4 mx-auto">`;
-                setTimeout(() => { 
-                    reveal.innerHTML = `<div class="reveal-role text-2xl">【役職】${victim.actualRoll}</div><div class="reveal-side text-lg">【勢力】${victim.side}</div>`; 
-                }, 700);
+                setTimeout(() => { reveal.innerHTML = `<div class="reveal-role text-2xl">【役職】${victim.actualRoll}</div><div class="reveal-side text-lg">【勢力】${victim.side}</div>`; }, 700);
             }
-            document.getElementById('modal-close-btn').onclick = () => {
-                closeModal();
-                if (nextNight) { if (!checkGameEnd()) { state.day++; processNight(); } }
-            };
+            document.getElementById('modal-close-btn').onclick = () => { closeModal(); if (callback) callback(); if (nextNight) { if (!checkGameEnd()) { state.day++; processNight(); } } };
             document.getElementById('modal').classList.remove('hidden');
         }
 
