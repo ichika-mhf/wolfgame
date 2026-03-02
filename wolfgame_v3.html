@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人狼推理ゲーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #020617;
+            --card-bg: #1e293b;
+            --accent: #f59e0b;
+            --text-main: #f1f5f9;
+        }
+
+        body { 
+            background-color: var(--bg-dark); 
+            color: var(--text-main); 
+            font-family: 'Shippori Mincho', serif;
+            background-image: 
+                linear-gradient(rgba(2, 6, 23, 0.85), rgba(2, 6, 23, 0.85)),
+                url('img/bg.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            margin: 0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        .log-container { 
+            background: rgba(15, 23, 42, 0.9); 
+            border: 1px solid rgba(245, 158, 11, 0.2); 
+            padding: 15px; 
+            border-radius: 12px;
+            overflow-y: auto;
+        }
+
+        .npc-card { 
+            background: var(--card-bg); 
+            transition: all 0.3s ease; 
+            border: 2px solid rgba(255,255,255,0.05); 
+            cursor: pointer; 
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px;
+            border-radius: 16px;
+        }
+
+        .npc-card:hover:not(.dead) {
+            background: #334155;
+            transform: translateY(-5px);
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .npc-card.selected { 
+            border-color: var(--accent); 
+            background: #334155; 
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+        }
+
+        .npc-card img {
+            width: 100%;
+            aspect-ratio: 1/1;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .dead { opacity: 0.5; filter: grayscale(1) brightness(0.5); background: #000 !important; cursor: default; }
+        .dead-stamp {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg);
+            font-weight: bold; font-size: 2rem; color: #f50707; border: 4px solid #f50707;
+            padding: 0px 10px; opacity: 0; transition: opacity 0.5s ease-in; z-index: 20; pointer-events: none;
+            background: rgba(0,0,0,0.5);
+        }
+        .dead .dead-stamp { opacity: 1; }
+
+        .btn-action { transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .btn-action:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.1); }
+        .btn-action:active { transform: translateY(1px); }
+
+        .speech-bubble {
+            position: relative;
+            background: rgba(15, 23, 42, 0.95);
+            border: 2px solid rgba(245, 158, 11, 0.4);
+            border-radius: 20px;
+            padding: 2rem 1.5rem 1.5rem;
+            box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.5);
+            margin-top: 20px;
+        }
+
+        .speech-name-tag {
+            position: absolute;
+            top: -18px;
+            left: 30px;
+            background: var(--accent);
+            color: #000;
+            padding: 4px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        /* モーダル表示のアニメーション */
+        .modal-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        .god-log { 
+            border-left: 3px solid var(--accent); background: rgba(0, 0, 0, 0.5); 
+            color: #fbbf24; font-family: monospace; padding: 6px; margin-bottom: 4px; font-size: 0.75rem;
+        }
+
+        .role-guide-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NIGHT OVERLAY -->
+    <div id="night-overlay" class="fixed inset-0 pointer-events-none hidden z-[100] flex flex-col items-center justify-center bg-black/95">
+        <div class="night-text" id="night-text-content"></div>
+        <div class="mt-8 text-slate-700 font-mono text-xs animate-pulse tracking-[0.2em]">ANALYZING NIGHT EVENTS...</div>
+    </div>
+
+    <!-- TITLE SCREEN -->
+    <div id="screen-title" class="fixed inset-0 flex items-center justify-center z-50 bg-slate-950 px-4">
+        <div class="max-w-2xl w-full text-center">
+            <h1 class="text-6xl font-bold text-amber-500 mb-6 tracking-tighter">人狼を推理せよ</h1>
+            <p class="text-slate-400 mb-12 text-xl">牙を隠した狼が、館の住人を狙っている。</p>
+            <div class="flex flex-col gap-4 max-w-xs mx-auto">
+                <button onclick="showRules()" class="btn-action py-5 bg-amber-600 text-white font-bold rounded-2xl text-2xl">捜査を開始する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RULES SCREEN -->
+    <div id="screen-rules" class="fixed inset-0 flex items-center justify-center z-40 bg-slate-900 hidden px-4 py-8">
+        <div class="max-w-3xl w-full bg-slate-800 p-10 rounded-[2.5rem] border border-amber-900/50 shadow-2xl relative overflow-hidden">
+            <!-- 探偵の背景画像 -->
+            <div class="absolute inset-0 pointer-events-none opacity-10 grayscale mix-blend-overlay bg-no-repeat bg-right-bottom bg-contain" style="background-image: url('img/探偵.png'); transform: scale(1.1) translate(5%, 5%);"></div>
+            
+            <h2 class="text-3xl font-bold text-amber-500 mb-6 border-b border-slate-700 pb-3 relative z-10">探偵への捜査手引</h2>
+            <div class="text-slate-300 space-y-6 text-lg leading-relaxed mb-10 relative z-10">
+                <p>● あなたの役目は【探偵】です。【人狼】を特定し、追放すれば勝利。全滅させられると敗北です。</p>
+                <p>● 住民たちから1日3回まで証言を聞くことができます。</p>
+                <p>● 市民は嘘をつけませんが、【人狼】や【第三勢力】は嘘の証言をすることがあります。</p>
+                <p>● 探偵の切り札「直感」はゲーム中1度だけ。対象の真の姿を暴きます。</p>
+            </div>
+            <button onclick="startGame()" class="w-full py-5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-2xl transition-colors shadow-lg text-xl relative z-10">準備は整った</button>
+        </div>
+    </div>
+
+    <!-- MAIN GAME AREA -->
+    <div id="screen-game" class="hidden">
+        <div class="max-w-6xl mx-auto p-3 md:p-5">
+            <header class="mb-4 border-b border-amber-900/50 pb-3 flex flex-col md:flex-row justify-between items-center gap-2">
+                <h1 class="text-2xl font-bold text-amber-500 tracking-tighter">人狼推理ゲーム</h1>
+                <div class="flex items-center gap-4">
+                    <label class="inline-flex items-center cursor-pointer group">
+                        <input type="checkbox" id="god-mode-toggle" class="sr-only peer" onchange="toggleGodMode()">
+                        <div class="relative w-9 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-600"></div>
+                        <span class="ms-2 text-[10px] font-medium text-slate-500 group-hover:text-amber-500 uppercase tracking-tighter">神視点</span>
+                    </label>
+                    <div id="game-status" class="text-base font-bold bg-slate-800 text-amber-500 border border-amber-900/50 px-4 py-1 rounded-full shadow-lg"></div>
+                </div>
+            </header>
+
+            <!-- ADVレイアウト構成 -->
+            <div class="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+                
+                <!-- 左メイン: ADVエリア -->
+                <div class="flex flex-col min-h-[450px]">
+                    <div class="flex-1">
+                        <h2 class="text-lg mb-3 font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">🔎 容疑者名簿</h2>
+                        <div id="npc-list" class="grid grid-cols-4 gap-3 mb-4"></div>
+                    </div>
+
+                    <div id="latest-dialogue-panel" class="mt-auto">
+                        <div id="latest-speech-bubble" class="speech-bubble min-h-[160px]">
+                            <div class="text-slate-500 italic text-center py-6 text-sm">容疑者を選択して、話を聞いてください。</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右サイド: 捜査パネル & ログ -->
+                <div class="space-y-4">
+                    <div id="action-panel" class="bg-slate-800 p-5 rounded-3xl border border-amber-900/30 shadow-2xl relative overflow-hidden">
+                        <!-- 探偵の背景画像 -->
+                        <div class="absolute inset-0 pointer-events-none opacity-10 grayscale mix-blend-overlay bg-no-repeat bg-right-bottom bg-contain" style="background-image: url('img/探偵.png'); transform: scale(1.1) translate(5%, 5%);"></div>
+                        
+                        <h2 class="text-lg mb-3 font-bold text-amber-500 border-b border-slate-700 pb-2 relative z-10">捜査手帳</h2>
+                        
+                        <div class="grid grid-cols-2 gap-2 mb-4 relative z-10">
+                            <div class="bg-slate-900/80 p-2 rounded-xl border border-slate-700 text-center">
+                                <div class="text-[11px] text-slate-500 uppercase tracking-widest font-bold mb-1">調査権</div>
+                                <div id="questions-count" class="text-2xl font-black text-amber-500">3/3</div>
+                            </div>
+                            <div class="bg-slate-900/80 p-2 rounded-xl border border-slate-700 text-center flex flex-col items-center justify-center">
+                                <div class="text-[11px] text-slate-500 uppercase tracking-widest font-bold mb-1">直感</div>
+                                <div id="intuition-badge" class="text-[9px] font-bold mt-1 px-2 py-0.5 rounded-full inline-block">READY</div>
+                            </div>
+                        </div>
+
+                        <div id="action-buttons" class="flex flex-col gap-2 min-h-[80px] relative z-10"></div>
+                        <div id="turn-info" class="mt-3 text-xs text-slate-300 italic leading-relaxed relative z-10"></div>
+                        
+                        <button onclick="toggleHistoryModal(true)" class="mt-5 w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold rounded-xl transition-all border border-slate-600 flex items-center justify-center gap-2 relative z-10">
+                            <span>📜 証言記録（履歴）を開く</span>
+                        </button>
+                    </div>
+
+                    <div>
+                        <h2 class="text-s mb-1 font-bold text-slate-500 uppercase tracking-widest">📜 状況記録</h2>
+                        <div id="public-log" class="log-container h-[160px] text-s leading-relaxed"></div>
+                    </div>
+
+                    <div id="god-log-area" class="hidden">
+                        <h2 class="text-s mb-1 font-bold text-amber-600 uppercase tracking-widest">⚡ 真実の記録 (神視点)</h2>
+                        <div id="god-log-container" class="log-container h-[120px] border-amber-900/50 bg-black/40 text-[9px]"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下部: 役職ガイド -->
+            <section class="mt-16 pt-8 border-t border-slate-800">
+                <h2 class="text-2xl mb-6 font-bold text-slate-500 flex items-center gap-2">📚 役職ガイド</h2>
+                <div class="role-guide-grid">
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">🛡️ 警備員</span>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物を他者の能力から保護する。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">🩺 医者</span>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物がその夜殺害された場合、蘇生できる。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">🤡 錯誤者</span>
+                        <p class="text-slate-400 text-sm mt-1">自分を何らかのロールだと思い込んで行動しているが実際には何の効果もない。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">🔍 捜査官</span>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物のロールが2種類提示される。どちらが正解か、また人狼かどうかはわからない。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">💻 ハッカー</span>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物の行動を妨害する。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">👁️ 目撃者</span>
+                        <p class="text-slate-400 text-sm mt-1">選んだ人物のもとに誰が来たか知る。何をしたかまではわからない。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">🔪 殺人鬼</span>
+                        <p class="text-slate-400 text-sm mt-1">人狼含め、他者を殺害できる。最後まで生き残れば勝利。</p>
+                    </div>
+                    <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
+                        <span class="text-amber-500 font-bold">🎭 怪盗</span>
+                        <p class="text-slate-400 text-sm mt-1">人狼含め、他者を殺害できる。対象の勢力とロールを奪う。</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- MODAL: GAME EVENTS -->
+    <div id="modal" class="fixed inset-0 bg-slate-950/95 hidden flex items-center justify-center p-4 z-[110] backdrop-blur-md">
+        <div class="bg-slate-800 p-10 rounded-[2.5rem] max-w-xl w-full border border-amber-900/50 shadow-2xl text-center modal-fade-in">
+            <h3 id="modal-title" class="text-3xl font-bold mb-6 text-amber-500 border-b border-slate-700 pb-4"></h3>
+            <div id="modal-content" class="mb-10 flex flex-col items-center">
+                <div id="modal-image-container"></div>
+                <p id="modal-body" class="text-slate-200 whitespace-pre-wrap leading-relaxed mt-6 text-lg"></p>
+                <div id="modal-reveal-area" class="mt-8 min-h-[80px]"></div>
+            </div>
+            <button id="modal-close-btn" class="w-full py-5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-2xl transition-all shadow-lg text-xl">OK</button>
+        </div>
+    </div>
+
+    <!-- MODAL: TESTIMONY HISTORY -->
+    <div id="history-modal" class="fixed inset-0 bg-slate-950/95 hidden flex items-center justify-center p-4 z-[120] backdrop-blur-md">
+        <div class="bg-slate-900 p-8 rounded-[2.5rem] max-w-2xl w-full h-[80vh] flex flex-col border border-slate-700 shadow-2xl modal-fade-in">
+            <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+                <h3 class="text-2xl font-bold text-amber-500">🖋️ 証言記録 (履歴)</h3>
+                <button onclick="toggleHistoryModal(false)" class="text-slate-400 hover:text-white text-3xl">&times;</button>
+            </div>
+            <div id="dialogue-log-history" class="flex-1 overflow-y-auto pr-2 space-y-4">
+                <!-- 履歴がここに流し込まれる -->
+            </div>
+            <button onclick="toggleHistoryModal(false)" class="mt-6 w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl transition-all">閉じる</button>
+        </div>
+    </div>
+
+    <script>
+        const ROLLS = {
+            KEIBI: '🛡️ 警備員', ISHA: '🩺 医者', SAKUGOSHA: '🤡 錯誤者',
+            SOUSA: '🔍 捜査官', HACKER: '💻 ハッカー', MOKUGEKI: '👁️ 目撃者',
+            SATSujIN: '🔪 殺人鬼', KAITOU: '🎭 怪盗'
+        };
+        const SIDE = { SHIMIN: '市民', JINRO: '人狼', THIRD: '第三勢力' };
+        const NAMES = ["アリス", "ボブ", "チャーリー", "デイビット", "エレン", "フランク", "ジル", "ハンス"];
+        const SHARED_ROLLS = [ROLLS.SOUSA, ROLLS.HACKER, ROLLS.MOKUGEKI];
+        const THIRD_ROLLS = [ROLLS.SATSujIN, ROLLS.KAITOU];
+        const NIGHT_FLAVOR_TEXTS = ["館の時計が深夜零時を告げる...", "廊下から重い足音が聞こえる...", "扉が静かに開く音がした...", "窓を叩く風が鳴いている..."];
+
+        let state = {
+            day: 0, phase: 'TITLE', npcs: [],
+            questionsLeft: 3, usedIntuition: false, isGameOver: false,
+            selectedNpcId: null, publicLogs: [], dialogueLogs: [],
+            godLogs: [], godMode: false, nightlyDeaths: [], isConferenceMode: false
+        };
+
+        function showRules() {
+            document.getElementById('screen-title').classList.add('hidden');
+            document.getElementById('screen-rules').classList.remove('hidden');
+        }
+
+        function startGame() {
+            document.getElementById('screen-rules').classList.add('hidden');
+            document.getElementById('screen-game').classList.remove('hidden');
+            initGameData();
+            processNight();
+        }
+
+        function initGameData() {
+            state.day = 1;
+            const shuffledNames = [...NAMES].sort(() => Math.random() - 0.5);
+            let finalRolls = [
+                { side: SIDE.SHIMIN, roll: ROLLS.KEIBI },
+                { side: SIDE.SHIMIN, roll: ROLLS.ISHA },
+                { side: SIDE.SHIMIN, roll: ROLLS.SAKUGOSHA },
+                { side: SIDE.JINRO, roll: SHARED_ROLLS[Math.floor(Math.random() * SHARED_ROLLS.length)] }
+            ];
+            const tCount = Math.floor(Math.random() * 3);
+            for (let i = 0; i < tCount; i++) finalRolls.push({ side: SIDE.THIRD, roll: THIRD_ROLLS[Math.floor(Math.random() * THIRD_ROLLS.length)] });
+            while (finalRolls.length < 8) finalRolls.push({ side: SIDE.SHIMIN, roll: SHARED_ROLLS[Math.floor(Math.random() * SHARED_ROLLS.length)] });
+            finalRolls.sort(() => Math.random() - 0.5);
+
+            state.npcs = shuffledNames.map((name, i) => {
+                const config = finalRolls[i];
+                let claimed = config.roll;
+                if (config.side !== SIDE.SHIMIN) claimed = SHARED_ROLLS[Math.floor(Math.random() * SHARED_ROLLS.length)];
+                return {
+                    id: i, name: name, side: config.side, actualRoll: config.roll,
+                    claimedRoll: claimed, perceivedRoll: config.roll, isDead: false,
+                    memories: [], investigationCache: {}, lastResult: null,
+                    image: `img/${name}.png`
+                };
+            });
+            // 錯誤者の初期設定
+            state.npcs.forEach(npc => {
+                if (npc.actualRoll === ROLLS.SAKUGOSHA) {
+                    npc.perceivedRoll = SHARED_ROLLS[Math.floor(Math.random() * SHARED_ROLLS.length)];
+                    npc.claimedRoll = npc.perceivedRoll;
+                }
+            });
+            addPublicLog("捜査が開始されました。館の中に人狼が潜んでいます。");
+        }
+
+        function toggleGodMode() {
+            state.godMode = document.getElementById('god-mode-toggle').checked;
+            document.getElementById('god-log-area').classList.toggle('hidden', !state.godMode);
+            updateUI();
+        }
+
+        function toggleHistoryModal(show) {
+            document.getElementById('history-modal').classList.toggle('hidden', !show);
+            if (show) renderHistory();
+        }
+
+        function addPublicLog(msg) {
+            state.publicLogs.push({ day: state.day, msg });
+            const logEl = document.getElementById('public-log');
+            const div = document.createElement('div');
+            div.className = 'mb-3 border-b border-slate-800 pb-2 text-slate-300';
+            div.innerHTML = `<span class="text-amber-600 font-mono mr-2 font-bold">D${state.day}</span> ${msg}`;
+            logEl.prepend(div);
+        }
+
+        function addGodLog(msg) {
+            const logEl = document.getElementById('god-log-container');
+            const div = document.createElement('div');
+            div.className = 'god-log';
+            div.innerHTML = `<span class="opacity-50">[D${state.day}]</span> ${msg}`;
+            logEl.prepend(div);
+        }
+
+        function addDialogueLog(npc, msg) {
+            state.dialogueLogs.push({ day: state.day, name: npc.name, image: npc.image, msg });
+            updateUI();
+        }
+
+        async function processNight() {
+            state.phase = 'NIGHT';
+            state.isConferenceMode = false;
+            updateUI();
+            const overlay = document.getElementById('night-overlay');
+            const textEl = document.getElementById('night-text-content');
+            overlay.classList.remove('hidden');
+            overlay.style.display = 'flex';
+            for (let i = 0; i < 3; i++) {
+                textEl.textContent = NIGHT_FLAVOR_TEXTS[Math.floor(Math.random() * NIGHT_FLAVOR_TEXTS.length)];
+                textEl.style.opacity = '1';
+                await new Promise(r => setTimeout(r, 1200));
+                textEl.style.opacity = '0';
+                await new Promise(r => setTimeout(r, 400));
+            }
+            calculateNight();
+            overlay.classList.add('hidden');
+            overlay.style.display = 'none';
+            goToMorning();
+        }
+
+        function calculateNight() {
+            const alive = state.npcs.filter(n => !n.isDead);
+            const actions = [];
+            state.npcs.forEach(n => n.lastResult = null);
+            state.npcs.forEach(npc => {
+                if (npc.isDead) return;
+                const others = alive.filter(n => n.id !== npc.id);
+                if (others.length === 0) return;
+                const target = others[Math.floor(Math.random() * others.length)];
+                
+                let type = 'ROLL';
+                if (npc.side === SIDE.JINRO) {
+                    type = (npc.lastActionType === 'ROLL') ? 'KILL' : (Math.random() > 0.4 ? 'KILL' : 'ROLL');
+                    npc.lastActionType = type;
+                }
+                actions.push({ actor: npc, target: target, action: type });
+            });
+
+            // --- 1. ハッカー（外出禁止） ---
+            const blocked = new Set();
+            actions.filter(a => a.actor.perceivedRoll === ROLLS.HACKER && a.action === 'ROLL').forEach(a => {
+                if (a.actor.actualRoll === ROLLS.HACKER) { 
+                    // 後でガード判定を行うため、ここでは「試行」として記録
+                    a.success = true;
+                }
+            });
+
+            // --- 2. 警備員（部屋監視） ---
+            const activeGuards = new Map(); // targetId -> actorId
+            actions.filter(a => a.actor.perceivedRoll === ROLLS.KEIBI && a.action === 'ROLL').forEach(a => {
+                if (a.actor.actualRoll === ROLLS.KEIBI) {
+                    // ハッカーに封じられていないかチェック（ハッカーのターゲットが自分）
+                    const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === a.actor.id && h.success);
+                    if (hackerA) {
+                        addGodLog(`GUARD: ${a.actor.name} (FAILED - BLOCKED BY HACKER)`);
+                    } else {
+                        activeGuards.set(a.target.id, a.actor.id);
+                        addGodLog(`GUARD: ${a.actor.name} → ${a.target.name} (WATCHING ROOM)`);
+                    }
+                }
+            });
+
+            // --- 3. 殺害フェーズ（ドミノ式解除ロジック） ---
+            let deaths = new Set();
+
+            // 殺害者のリスト（優先順位順）
+            const killers = [
+                ...actions.filter(a => a.actor.side === SIDE.JINRO && a.action === 'KILL'), // 人狼
+                ...actions.filter(a => a.actor.actualRoll === ROLLS.SATSujIN),              // 殺人鬼
+                ...actions.filter(a => a.actor.actualRoll === ROLLS.KAITOU)               // 怪盗
+            ];
+
+            killers.forEach(k => {
+                if (deaths.has(k.actor.id)) {
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} (FAILED - ALREADY KILLED)`);
+                    return;
+                }
+                // ハッカーに封じられていないか
+                const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === k.actor.id && h.success);
+                if (hackerA) {
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} (FAILED - BLOCKED BY HACKER)`);
+                    return;
+                }
+
+                // ガードされているか
+                if (activeGuards.has(k.target.id)) {
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} → ${k.target.name} (FAILED - ROOM GUARDED)`);
+                } else {
+                    deaths.add(k.target.id);
+                    addGodLog(`${k.actor.actualRoll}: ${k.actor.name} → ${k.target.name} (SUCCESS)`);
+                    
+                    // 【重要】もし殺害されたのが警備員だった場合、その警備員が守っていたガードを即座に解除
+                    for (let [tId, aId] of activeGuards) {
+                        if (aId === k.target.id) {
+                            activeGuards.delete(tId);
+                            addGodLog(`GUARD VOID: ${state.npcs[aId].name} KILLED, ROOM ${state.npcs[tId].name} NOW UNPROTECTED`);
+                        }
+                    }
+
+                    // 怪盗の特殊処理
+                    if (k.actor.actualRoll === ROLLS.KAITOU) {
+                        const t = k.target;
+                        setTimeout(() => { k.actor.side = t.side; k.actor.actualRoll = t.actualRoll; k.actor.perceivedRoll = t.perceivedRoll; if (k.actor.side === SIDE.SHIMIN) k.actor.claimedRoll = k.actor.perceivedRoll; }, 0);
+                    }
+                }
+            });
+
+            // --- 4. 医者（蘇生） ---
+            actions.filter(a => a.actor.perceivedRoll === ROLLS.ISHA && a.action === 'ROLL').forEach(a => { 
+                const hackerA = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === a.actor.id && h.success);
+                if (hackerA || deaths.has(a.actor.id)) {
+                    addGodLog(`DOCTOR HEAL: ${a.actor.name} (FAILED)`);
+                } else {
+                    if (deaths.has(a.target.id) && a.actor.actualRoll === ROLLS.ISHA) {
+                        deaths.delete(a.target.id); 
+                        a.actor.lastResult = "SUCCESS";
+                        addGodLog(`DOCTOR HEAL: ${a.actor.name} → ${a.target.name} (SUCCESS)`);
+                    } else {
+                        addGodLog(`DOCTOR HEAL: ${a.actor.name} → ${a.target.name} (NO TARGET)`);
+                    }
+                }
+            });
+
+            // --- 5. 調査系能力の確定（ガード対象には効かない） ---
+            // ハッカー
+            actions.filter(a => a.actor.perceivedRoll === ROLLS.HACKER && a.action === 'ROLL' && a.success).forEach(a => {
+                if (deaths.has(a.actor.id)) return;
+                if (activeGuards.has(a.target.id)) {
+                    a.success = false; // ガードされた
+                    a.actor.lastResult = "GUARDED";
+                    addGodLog(`HACK: ${a.actor.name} → ${a.target.name} (FAILED - ROOM GUARDED)`);
+                } else {
+                    blocked.add(a.target.id);
+                    a.actor.lastResult = "SUCCESS";
+                    addGodLog(`HACK: ${a.actor.name} → ${a.target.name} (SUCCESS)`);
+                }
+            });
+
+            // 結果の確定
+            state.nightlyDeaths = Array.from(deaths);
+            actions.forEach(a => {
+                if (a.actor.lastResult && a.actor.lastResult !== "SUCCESS" && a.actor.lastResult !== "GUARDED") return;
+                
+                // state.nightlyDeathsに含まれる＝その夜最終的に死亡した人物
+                if (state.nightlyDeaths.includes(a.actor.id)) {
+                    a.actor.lastResult = "襲撃を受け、行動不能になりました。";
+                    return;
+                }
+                const isBlocked = actions.find(h => h.actor.perceivedRoll === ROLLS.HACKER && h.target.id === a.actor.id && h.success);
+                if (isBlocked) { 
+                    a.actor.lastResult = "何者かに妨害されました。"; 
+                    return; 
+                }
+
+                const isReal = a.actor.actualRoll === a.actor.perceivedRoll;
+                // ガード対象への調査失敗判定
+                if (['捜査官', '目撃者', 'ハッカー'].includes(a.actor.perceivedRoll) && activeGuards.has(a.target.id)) {
+                    a.actor.lastResult = "部屋の守りが固く、何も情報を得られませんでした。";
+                    addGodLog(`${a.actor.perceivedRoll}: ${a.actor.name} → ${a.target.name} (FAILED - GUARDED)`);
+                    return;
+                }
+
+                if (a.actor.perceivedRoll === ROLLS.KEIBI) {
+                    const wasTargetAttackedOrInterfered = actions.some(x => x.target.id === a.target.id && x.actor.id !== a.actor.id);
+                    a.actor.lastResult = (wasTargetAttackedOrInterfered && isReal) ? `${a.target.name}さんの部屋に近づく影を、暗闇の中で追い払いました。` : "異常なし。";
+                    addGodLog(`KEIBI: ${a.actor.name} → ${a.target.name} (DONE)`);
+                } else if (a.actor.perceivedRoll === ROLLS.SOUSA) {
+                    if (a.actor.investigationCache[a.target.id]) {
+                        a.actor.lastResult = a.actor.investigationCache[a.target.id];
+                    } else {
+                        const roles = Object.values(ROLLS).filter(r => r !== ROLLS.SAKUGOSHA);
+                        let c1, c2;
+                        if (isReal && a.actor.actualRoll === ROLLS.SOUSA) {
+                            c1 = a.target.perceivedRoll;
+                            const others = roles.filter(r => r !== c1);
+                            c2 = others[Math.floor(Math.random() * others.length)];
+                        } else {
+                            const shuffled = roles.filter(r => r !== a.target.perceivedRoll).sort(() => Math.random() - 0.5);
+                            c1 = shuffled[0]; c2 = shuffled[1];
+                        }
+                        a.actor.lastResult = `調査の結果、役職は「${c1}」か「${c2}」のようです。`;
+                        a.actor.investigationCache[a.target.id] = a.actor.lastResult;
+                    }
+                    addGodLog(`SOUSA: ${a.actor.name} → ${a.target.name} (DONE)`);
+                } else if (a.actor.perceivedRoll === ROLLS.MOKUGEKI) {
+                    const v = actions.find(x => x.target.id === a.target.id && x.actor.id !== a.actor.id);
+                    a.actor.lastResult = (isReal) ? (v ? `${v.actor.name}さんの侵入を目撃。` : "誰も現れませんでした。") : (Math.random() > 0.5 ? "不審な人影を目撃しました。" : "誰も現れませんでした。");
+                    addGodLog(`MOKUGEKI: ${a.actor.name} → ${a.target.name} (DONE)`);
+                } else if (!a.actor.lastResult) {
+                    a.actor.lastResult = "異常なし。";
+                }
+            });
+            state.nightlyDeaths.forEach(id => state.npcs[id].isDead = true);
+            actions.forEach(a => { a.actor.memories.push({ day: state.day, targetId: a.target.id, target: a.target.name, result: a.actor.lastResult, wasRealRoleAction: (a.action === 'ROLL' || (a.actor.side === SIDE.SHIMIN)) }); });
+        }
+
+        function goToMorning() {
+            state.phase = 'MORNING';
+            updateUI();
+            if (state.nightlyDeaths.length > 0) {
+                let b = "";
+                state.nightlyDeaths.forEach(id => {
+                    const v = state.npcs[id]; b += `▼ 犠牲者：${v.name}\n役職：${v.actualRoll}\n\n`;
+                    addPublicLog(`${v.name}の遺体が発見されました。（役職：${v.actualRoll}）`);
+                });
+                showModal("惨劇の朝", b);
+            } else {
+                showModal("平穏な朝", "犠牲者はいませんでした。館の守りは固いようです。");
+                addPublicLog("犠牲者はなし。");
+            }
+            if (!checkGameEnd()) { state.phase = 'DAY'; state.questionsLeft = 3; updateUI(); }
+        }
+
+        function generateTestimony(npc) {
+            const claimed = npc.claimedRoll;
+            let intro = `私の役職は「${claimed}」です。`;
+            let log = "";
+            npc.memories.forEach(m => {
+                let targetNpc = state.npcs[m.targetId];
+                let line = `\n・${m.day}日目：${m.target}さんの部屋へ行きました。`;
+                let detail = "";
+                
+                // 行動不能や妨害の結果を最優先で反映
+                if (m.result.includes("行動不能") || m.result.includes("身動きが取れず")) {
+                    detail = m.result;
+                } else if (claimed === ROLLS.SOUSA) {
+                    if (npc.investigationCache[targetNpc.id]) { detail = npc.investigationCache[targetNpc.id]; }
+                    else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) { 
+                        detail = m.result; npc.investigationCache[targetNpc.id] = detail;
+                    } else {
+                        const roles = Object.values(ROLLS).filter(r => r !== ROLLS.SAKUGOSHA);
+                        const c1 = targetNpc.claimedRoll;
+                        const c2 = roles.filter(r => r !== c1)[Math.floor(Math.random() * (roles.length-1))];
+                        detail = `調査の結果、役職は「${c1}」か「${c2}」のようです。`;
+                        npc.investigationCache[targetNpc.id] = detail;
+                    }
+                } else if (claimed === ROLLS.MOKUGEKI) {
+                    detail = (npc.actualRoll === ROLLS.MOKUGEKI && m.wasRealRoleAction) ? m.result : (targetNpc.isDead ? "何者かが侵入するのを見ました！" : "誰も現れませんでした。");
+                } else if (claimed === ROLLS.HACKER) {
+                    detail = (m.result === "異常なし。" || m.result.includes("SUCCESS")) ? "端末を操作し、ハッキングを行いました。" : m.result;
+                } else if (claimed === ROLLS.ISHA) {
+                    if (m.result.includes("SUCCESS")) {
+                        detail = `${targetNpc.name}さんは息絶えそうでしたが、私の応急処置で一命を取り留めました。`;
+                    } else {
+                        detail = (m.result === "異常なし。") ? `${targetNpc.name}さんの往診に向かいました。特に異常は見られませんでした。` : m.result;
+                    }
+                } else {
+                    // 警備員などは既に具体的な「守りきった」等の結果が入っているためそのまま反映
+                    detail = m.result;
+                }
+                log += line + detail;
+            });
+            return intro + log;
+        }
+
+        function askNPC(id) {
+            if (state.questionsLeft <= 0 || state.npcs[id].isDead) return;
+            const npc = state.npcs[id];
+            state.questionsLeft--;
+            addDialogueLog(npc, generateTestimony(npc));
+            if (state.questionsLeft === 0) state.isConferenceMode = true;
+            updateUI();
+        }
+
+        function useIntuition(id) {
+            if (state.usedIntuition || state.npcs[id].isDead) return;
+            state.usedIntuition = true;
+            const n = state.npcs[id];
+            showModal("探偵の直感", `${n.name}の正体を暴いた。\n\n【勢力】${n.side}\n【真の役職】${n.actualRoll}`);
+            updateUI();
+        }
+
+        function exileNPC(id) {
+            if (id === null) {
+                showModal("審判", "本日は誰も追放せず、様子を見ることにしました。", true);
+                addPublicLog("誰も追放しませんでした。");
+            } else {
+                const v = state.npcs[id]; v.isDead = true;
+                addPublicLog(`${v.name}を追放しました。`);
+                showModal("審判の瞬間", `${v.name}を追放。その正体は...`, true, v);
+            }
+        }
+
+        function checkGameEnd() {
+            const alive = state.npcs.filter(n => !n.isDead);
+            const wolfA = alive.some(n => n.side === SIDE.JINRO);
+            const killerA = alive.some(n => n.actualRoll === ROLLS.SATSujIN || (n.actualRoll === ROLLS.KAITOU && n.side === SIDE.THIRD));
+            if (!wolfA && !killerA) { endGame("【勝利】館から全ての脅威が消え去りました。"); return true; }
+            if (alive.length <= 2) {
+                endGame(wolfA ? "【敗北】人狼に支配されました。" : "【敗北】殺人鬼だけが残りました。");
+                return true;
+            }
+            return false;
+        }
+
+        function endGame(msg) { state.isGameOver = true; showModal("終局", msg); updateUI(); }
+
+        function updateUI() {
+            // NPCリスト
+            const listEl = document.getElementById('npc-list');
+            listEl.innerHTML = '';
+            state.npcs.forEach(npc => {
+                const card = document.createElement('div');
+                card.className = `npc-card ${npc.isDead ? 'dead' : ''} ${state.selectedNpcId === npc.id ? 'selected' : ''}`;
+                card.onclick = () => { if(!npc.isDead) { state.selectedNpcId = npc.id; updateUI(); } };
+                
+                let gi = '';
+                if (state.godMode) {
+                    const bc = npc.side === SIDE.JINRO ? 'bg-red-900' : (npc.side === SIDE.THIRD ? 'bg-purple-900' : 'bg-blue-900');
+                    gi = `<div class="absolute top-0 left-0 text-[10px] ${bc} text-white px-2 py-0.5 rounded-br-lg z-20 font-bold">${npc.actualRoll}</div>`;
+                }
+                
+                const roleInfo = npc.isDead ? `<div class="text-[10px] text-red-400 font-bold mt-1 uppercase tracking-tighter">${npc.actualRoll}</div>` : '';
+
+                card.innerHTML = `
+                    ${gi}
+                    <div class="dead-stamp">OUT</div>
+                    <img src="${npc.image}" alt="${npc.name}">
+                    <span class="font-bold text-sm text-slate-300">${npc.name}</span>
+                    ${roleInfo}
+                `;
+                listEl.appendChild(card);
+            });
+
+            // 最新の発言 (ADV形式)
+            const speechBubble = document.getElementById('latest-speech-bubble');
+            if (state.dialogueLogs.length > 0) {
+                const last = state.dialogueLogs[state.dialogueLogs.length - 1];
+                speechBubble.innerHTML = `
+                    <div class="speech-name-tag">${last.name}</div>
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <div class="text-slate-200 text-lg leading-relaxed whitespace-pre-wrap font-medium">${last.msg}</div>
+                            <div class="text-[10px] text-slate-500 mt-4 italic text-right">${last.day}日目の証言</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                speechBubble.innerHTML = `<div class="text-slate-500 italic text-center py-8">容疑者を選択して、詳細を調査してください。</div>`;
+            }
+
+            // 操作パネル
+            document.getElementById('questions-count').textContent = `${state.questionsLeft}/3`;
+            const ib = document.getElementById('intuition-badge');
+            ib.textContent = state.usedIntuition ? 'USED' : 'READY';
+            ib.className = `text-[10px] font-bold mt-1 px-3 py-1 rounded-full ${state.usedIntuition ? 'bg-slate-700 text-slate-500' : 'bg-purple-900 text-purple-300'}`;
+            document.getElementById('game-status').textContent = `${state.day}日目 ${getPhaseName()}`;
+            
+            const btnArea = document.getElementById('action-buttons');
+            btnArea.innerHTML = '';
+            const ti = document.getElementById('turn-info');
+            if (state.isGameOver) { btnArea.appendChild(createButton('最初からプレイする', () => location.reload(), 'bg-amber-600 py-4 text-lg')); return; }
+            
+            if (state.phase === 'DAY') {
+                if (!state.isConferenceMode) {
+                    ti.textContent = "容疑者を選択し、質問または直感で正体を探ってください。残りの質問回数に注意しましょう。";
+                    if (state.selectedNpcId !== null) {
+                        const t = state.npcs[state.selectedNpcId];
+                        btnArea.appendChild(createButton(`${t.name}に詳細を問う`, () => askNPC(t.id), 'bg-amber-700 py-3 text-base'));
+                        if (!state.usedIntuition) btnArea.appendChild(createButton(`${t.name}の正体を暴く (直感)`, () => useIntuition(t.id), 'bg-purple-800 py-3 text-base'));
+                    } else {
+                        ti.textContent = "容疑者のアイコンをクリックして選択してください。";
+                    }
+                    btnArea.appendChild(createButton('追放フェーズへ進む', () => { state.questionsLeft = 0; state.isConferenceMode = true; updateUI(); }, 'bg-slate-700 text-s py-2 opacity-70 mt-4'));
+                } else {
+                    ti.textContent = "誰か一人を追放しますか？それとも様子を見ますか？慎重に決断してください。";
+                    if (state.selectedNpcId !== null) {
+                        const t = state.npcs[state.selectedNpcId];
+                        btnArea.appendChild(createButton(`${t.name}を館から追放する`, () => exileNPC(t.id), 'bg-red-800 py-4 text-base'));
+                    } else {
+                        ti.textContent = "追放する人物を選択してください。";
+                    }
+                    btnArea.appendChild(createButton('様子を見る（追放しない）', () => exileNPC(null), 'bg-slate-700 py-4 text-base'));
+                }
+            } else { ti.textContent = "夜の闇が明けるのを待っています..."; }
+        }
+
+        function renderHistory() {
+            const historyEl = document.getElementById('dialogue-log-history');
+            if (state.dialogueLogs.length === 0) {
+                historyEl.innerHTML = '<div class="text-slate-600 text-center mt-10 italic text-xl">まだ記録された証言はありません</div>';
+                return;
+            }
+            historyEl.innerHTML = [...state.dialogueLogs].reverse().map(log => `
+                <div class="bg-slate-800/50 p-5 rounded-2xl border border-slate-700">
+                    <div class="flex items-center gap-3 mb-2">
+                        <img src="${log.image}" class="w-8 h-8 rounded-full">
+                        <div class="font-bold text-amber-500 text-sm">${log.name}</div>
+                        <div class="text-[10px] text-slate-500 ml-auto italic">Day ${log.day}</div>
+                    </div>
+                    <div class="text-slate-300 text-sm leading-relaxed">${log.msg.replace(/\n/g, '<br>')}</div>
+                </div>
+            `).join('');
+        }
+
+        function createButton(txt, click, cls) {
+            const b = document.createElement('button');
+            b.className = `btn-action w-full rounded-2xl font-bold text-white transition-all ${cls}`;
+            b.innerHTML = txt; b.onclick = (e) => { e.stopPropagation(); click(); };
+            return b;
+        }
+
+        function getPhaseName() { switch(state.phase) { case 'NIGHT': return '🌙 夜'; case 'MORNING': return '☀️ 朝'; case 'DAY': return '☀️ 昼'; default: return ''; } }
+
+        function showModal(title, body, nextNight = false, victim = null) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-body').textContent = body;
+            const reveal = document.getElementById('modal-reveal-area');
+            const imgC = document.getElementById('modal-image-container');
+            reveal.innerHTML = ''; imgC.innerHTML = '';
+            if (victim) {
+                imgC.innerHTML = `<img src="${victim.image}" class="w-24 h-24 rounded-full border-4 border-amber-500 mb-4 mx-auto">`;
+                setTimeout(() => { 
+                    reveal.innerHTML = `<div class="reveal-role text-2xl">【役職】${victim.actualRoll}</div><div class="reveal-side text-lg">【勢力】${victim.side}</div>`; 
+                }, 700);
+            }
+            document.getElementById('modal-close-btn').onclick = () => {
+                closeModal();
+                if (nextNight) { if (!checkGameEnd()) { state.day++; processNight(); } }
+            };
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+    </script>
+</body>
+</html>
