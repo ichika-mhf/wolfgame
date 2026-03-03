@@ -342,6 +342,105 @@
         const THIRD_ROLLS = [ROLLS.SATSujIN, ROLLS.KAITOU];
         const NIGHT_FLAVOR_TEXTS = ["館の時計が深夜零時を告げる...", "廊下から重い足音が聞こえる...", "扉が静かに開く音がした...", "窓を叩く風が鳴いている..."];
 
+        const PERSONALITIES = {
+            alice: { 
+                name: "アリス", me: "私", 
+                intro: (r) => `あたしの役職はね、「${r}」だよ！`,
+                visit: (t) => `${t}さんの部屋へ遊びに行ってみたの！`,
+                fail: (m) => m.includes("行動不能") ? "でもね、急に誰かに襲われちゃって…。怖かったよぉ。" : "なんだかお部屋に入れなくて、身動きが取れなかったんだ。",
+                res_ok: "特に変わったことはなかったよ！みんな元気そうだった！",
+                res_isha: "死んじゃいそうだったけど、私の応急処置で助けてあげたんだよ！すごいでしょ！",
+                res_keibi: "悪い人が来そうだったから、私がえいっ！て追い払っちゃった！",
+                res_hack: "端末をポチポチして、ハッキング大成功だよ！",
+                res_sousa: (c1, c2) => `えーっとね、調べてみたら「${c1}」か「${c2}」みたい！`,
+                res_moku: (n) => n ? `${n}さんが入っていくのを見ちゃった！` : "誰も来なかったよ。退屈だったなぁ。"
+            },
+            ellen: { 
+                name: "エレン", me: "私", 
+                intro: (r) => `私の役職は「${r}」でございます。`,
+                visit: (t) => `${t}様の元へお伺いいたしました。`,
+                fail: (m) => m.includes("行動不能") ? "不覚にも、何者かに襲撃されてしまいました…。" : "扉が閉ざされており、お役に立てませんでした。",
+                res_ok: "診察の結果、特に異常は見受けられませんでした。",
+                res_isha: "息絶えそうな状態でしたが、私の処置で一命を取り留めました。",
+                res_keibi: "不審な人影を確認しましたので、即座に追い払いました。ご安心を。",
+                res_hack: "端末を操作し、ハッキングを完了いたしましたわ。",
+                res_sousa: (c1, c2) => `調査の結果、役職は「${c1}」か「${c2}」のようでございます。`,
+                res_moku: (n) => n ? `${n}様が侵入されるのを目撃いたしました。` : "どなたも現れませんでした。"
+            },
+            jill: { 
+                name: "ジル", me: "私", 
+                intro: (r) => `私の役職は「${r}」だ。`,
+                visit: (t) => `${t}の部屋を確認しに行った。`,
+                fail: (m) => m.includes("行動不能") ? "…襲撃を受けた。面目ない。" : "何者かの妨害に遭い、中に入ることができなかった。",
+                res_ok: "特に不審な点はなかった。異常なしだ。",
+                res_isha: "瀕死の状態だったが、処置を施し、生存を確認した。",
+                res_keibi: "部屋に近づく影を排除した。ターゲットは無事だ。",
+                res_hack: "ハッキングは成功した。データは手元にある。",
+                res_sousa: (c1, c2) => `調査の結果だ。対象の役職は「${c1}」か「${c2}」で間違いないだろう。`,
+                res_moku: (n) => n ? `${n}の侵入を目撃した。間違いない。` : "誰も現れなかった。異常なし。"
+            },
+            charlie: { 
+                name: "チャーリー", me: "私", 
+                intro: (r) => `私の役職は「${r}」です。`,
+                visit: (t) => `${t}さんの部屋を訪問しました。`,
+                fail: (m) => m.includes("行動不能") ? "襲撃を受け行動不能となってしまいました。" : "妨害に遭い、部屋に入ることが叶いませんでした。",
+                res_ok: "特に変わった様子はなく、平穏な夜でした。",
+                res_isha: "瀕死の状態でしたが、なんとか命を救うことができました。",
+                res_keibi: "不審な人影を追い払いました。これでお部屋の安全は保たれるはずです。",
+                res_hack: "端末を操作し、ハッキングを無事に成功させました。",
+                res_sousa: (c1, c2) => `調査の結果を報告します。「${c1}」か「${c2}」のいずれかのようです。`,
+                res_moku: (n) => n ? `${n}さんが入っていくのを見かけました。` : "誰も現れませんでした。静かなものでした。"
+            },
+            david: { 
+                name: "デイビット", me: "僕", 
+                intro: (r) => `僕の役職は「${r}」です。`,
+                visit: (t) => `${t}さんの部屋へ向かいました。`,
+                fail: (m) => m.includes("行動不能") ? "襲撃に遭いました。職務を全うできず申し訳ない。" : "妨害を受け、部屋の確認ができませんでした。",
+                res_ok: "入念に確認しましたが、特に異常はありませんでした。",
+                res_isha: "危険な状態でしたが、応急処置で一命を取り留めました。",
+                res_keibi: "部屋に近づく影を暗闇の中で追い払いました。任務完了です。",
+                res_hack: "ハッキングを行いました。計画通りです。",
+                res_sousa: (c1, c2) => `調査の結果をお伝えします。役職は「${c1}」か「${c2}」のようです。`,
+                res_moku: (n) => n ? `${n}さんの侵入を目撃。記録しておきました。` : "不審な人影は現れませんでした。異常なし。"
+            },
+            hans: { 
+                name: "ハンス", me: "僕", 
+                intro: (r) => `…僕の役職は、「${r}」だよ…。`,
+                visit: (t) => `${t}の、部屋に……行ってた。`,
+                fail: (m) => m.includes("行動不能") ? "…誰かに、やられた…。" : "…入れなかった…。誰かが、邪魔した…。",
+                res_ok: "…別に、何も…なかったよ。",
+                res_isha: "…死にそうだったから、助けておいた。",
+                res_keibi: "…暗闇に誰かいたから、追い払っておいた…。",
+                res_hack: "…ハッキングしておいた。簡単だったよ…。",
+                res_sousa: (c1, c2) => `…わかったことは、「${c1}」か「${c2}」…っていうことだけ。`,
+                res_moku: (n) => n ? `…${n}が、入っていくの…見たよ。` : "…誰も、来なかった。静かだったよ。"
+            },
+            frank: { 
+                name: "フランク", me: "僕", 
+                intro: (r) => `僕の役職は「${r}」なんだ！`,
+                visit: (t) => `${t}さんのところへ行ってきたよ。`,
+                fail: (m) => m.includes("行動不能") ? "誰かに襲われちゃって、全然動けなかったんだ…。" : "なんだか妨害されちゃって、中に入れなかったよ。",
+                res_ok: "診察したけど、特に変わったところはなかったよ！",
+                res_isha: "すごく危ない状態だったけど、僕が助けてあげたんだ！よかった！",
+                res_keibi: "不審な影を見つけたから、追い払っておいたよ！安心して！",
+                res_hack: "端末を使って、ハッキング成功だ！",
+                res_sousa: (c1, c2) => `調査した結果を教えるね！「${c1}」か「${c2}」みたいだよ！`,
+                res_moku: (n) => n ? `${n}さんが部屋に入るのを見ちゃったんだ。` : "誰も来なかったよ。ずっと見てたんだけどね。"
+            },
+            bob: { 
+                name: "ボブ", me: "俺", 
+                intro: (r) => `けっ、俺の役職は「${r}」だぜ。`,
+                visit: (t) => `${t}の部屋をのぞいてやった。`,
+                fail: (m) => m.includes("行動不能") ? "チッ、何者かに不意を突かれちまったぜ。" : "ヘマはしてねえが、何かに阻まれて手も足も出なかったぜ。",
+                res_ok: "あぁ？ 別に何もねえよ。異常なしだ。",
+                res_isha: "今にもくたばりそうだったが、俺様が救ってやったんだ。感謝しな。",
+                res_keibi: "コソコソ近づくネズミを一匹、追い払ってやったのさ。俺の勝ちだ。",
+                res_hack: "端末をちょいといじって、ハックしてやったぜ。楽勝だ。",
+                res_sousa: (c1, c2) => `お望みの結果だ。役職は「${c1}」か「${c2}」ってところだな。`,
+                res_moku: (n) => n ? `あぁん？ ${n}がコソコソ入っていくのを見ちまったぜ。` : "誰も来ねえよ。退屈すぎてあくびが出たぜ。"
+            }
+        };
+
         let state = {
             day: 0, phase: 'TITLE', npcs: [],
             questionsLeft: 3, usedIntuition: false, isGameOver: false,
@@ -379,11 +478,16 @@
                 const config = finalRolls[i];
                 let claimed = config.roll;
                 if (config.side !== SIDE.SHIMIN) claimed = SHARED_ROLLS[Math.floor(Math.random() * SHARED_ROLLS.length)];
+                
+                // 名前から性格キーを特定（ひらがな/カタカナ対応）
+                const pKey = Object.keys(PERSONALITIES).find(k => PERSONALITIES[k].name === name);
+
                 return {
                     id: i, name: name, side: config.side, actualRoll: config.roll,
                     claimedRoll: claimed, perceivedRoll: config.roll, isDead: false,
                     memories: [], investigationCache: {}, lastResult: null,
-                    image: `img/${name}.png`
+                    image: `img/${name}.png`,
+                    personality: PERSONALITIES[pKey]
                 };
             });
             // 錯誤者の初期設定
@@ -643,36 +747,57 @@
         }
 
         function generateTestimony(npc) {
+            const p = npc.personality;
             const claimed = npc.claimedRoll;
-            let intro = `私の役職は「${claimed}」です。`;
+            let intro = p.intro(claimed);
             let log = "";
+
             npc.memories.forEach(m => {
                 let targetNpc = state.npcs[m.targetId];
-                let line = `\n・${m.day}日目：${m.target}さんの部屋へ行きました。`;
+                let line = `\n・${m.day}日目：${p.visit(m.target)}`;
                 let detail = "";
-                let resultText = m.result;
-                if (resultText === "GUARDED") resultText = "部屋の守りが固く、何も情報を得られませんでした。";
-                if (resultText === "SUCCESS" && claimed === ROLLS.HACKER) resultText = "端末を操作し、ハッキングを行いました。";
-                if (resultText.includes("行動不能") || resultText.includes("妨害されました") || resultText.includes("身動きが取れず")) {
-                    detail = resultText;
-                } else if (claimed === ROLLS.SOUSA) {
-                    if (npc.investigationCache[targetNpc.id]) { detail = npc.investigationCache[targetNpc.id]; }
-                    else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) { detail = resultText; npc.investigationCache[targetNpc.id] = detail; }
-                    else {
+                let res = m.result;
+
+                // 行動不能・妨害の特殊ケース
+                if (res.includes("行動不能") || res.includes("妨害されました") || res.includes("身動きが取れず") || res === "GUARDED") {
+                    detail = p.fail(res);
+                } 
+                // 各役割ごとの証言生成
+                else if (claimed === ROLLS.SOUSA) {
+                    if (npc.investigationCache[targetNpc.id]) {
+                        // 既に証言済みの結果がある場合、その結果から役職名を抽出してテンプレートに当てはめる
+                        const match = npc.investigationCache[targetNpc.id].match(/「(.+?)」か「(.+?)」/);
+                        if (match) detail = p.res_sousa(match[1], match[2]);
+                        else detail = npc.investigationCache[targetNpc.id];
+                    } else if ((npc.actualRoll === ROLLS.SOUSA || npc.actualRoll === ROLLS.SAKUGOSHA) && m.wasRealRoleAction) {
+                        const match = res.match(/「(.+?)」か「(.+?)」/);
+                        if (match) {
+                            detail = p.res_sousa(match[1], match[2]);
+                            npc.investigationCache[targetNpc.id] = res; // 内部的には正規化されたデータを保持
+                        } else detail = res;
+                    } else {
                         const roles = Object.values(ROLLS).filter(r => r !== ROLLS.SAKUGOSHA);
                         const c1 = targetNpc.claimedRoll;
                         const c2 = roles.filter(r => r !== c1)[Math.floor(Math.random() * (roles.length-1))];
-                        detail = `調査の結果、役職は「${c1}」か「${c2}」のようです。`;
-                        npc.investigationCache[targetNpc.id] = detail;
+                        detail = p.res_sousa(c1, c2);
+                        npc.investigationCache[targetNpc.id] = `「${c1}」か「${c2}」`;
                     }
                 } else if (claimed === ROLLS.MOKUGEKI) {
-                    detail = (npc.actualRoll === ROLLS.MOKUGEKI && m.wasRealRoleAction) ? resultText : (targetNpc.isDead ? "何者かが侵入するのを見ました！" : "誰も現れませんでした。");
+                    if (npc.actualRoll === ROLLS.MOKUGEKI && m.wasRealRoleAction) {
+                        const match = res.match(/(.+?)さんの侵入を目撃/);
+                        detail = p.res_moku(match ? match[1] : null);
+                    } else {
+                        detail = p.res_moku(targetNpc.isDead ? "何者か" : null);
+                    }
                 } else if (claimed === ROLLS.HACKER) {
-                    detail = (resultText === "異常なし。" || resultText === "SUCCESS") ? "端末を操作し、ハッキングを行いました。" : resultText;
+                    detail = (res === "異常なし。" || res === "SUCCESS") ? p.res_hack : p.fail(res);
                 } else if (claimed === ROLLS.ISHA) {
-                    if (resultText === "SUCCESS") { detail = `息絶えそうでしたが、私の応急処置で一命を取り留めました。`; }
-                    else { detail = (resultText === "異常なし。") ? `診察を行いましたが、特に異常は見られませんでした。` : resultText; }
-                } else { detail = resultText; }
+                    detail = (res === "SUCCESS") ? p.res_isha : (res === "異常なし。" ? p.res_ok : p.fail(res));
+                } else if (claimed === ROLLS.KEIBI) {
+                    detail = res.includes("追い払いました") ? p.res_keibi : p.res_ok;
+                } else {
+                    detail = p.res_ok;
+                }
                 log += line + detail;
             });
             return intro + log;
