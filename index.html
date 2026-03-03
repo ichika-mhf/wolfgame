@@ -173,12 +173,12 @@
             <header class="mb-4 border-b border-amber-900/50 pb-3 flex flex-col md:flex-row justify-between items-center gap-2">
                 <h1 class="text-2xl font-bold text-amber-500 tracking-tighter">人狼推理ゲーム</h1>
                 <div class="flex items-center gap-4">
-                    <label class="inline-flex items-center cursor-pointer group">
+                    <label id="god-mode-container" class="inline-flex items-center cursor-pointer group hidden">
                         <input type="checkbox" id="god-mode-toggle" class="sr-only peer" onchange="toggleGodMode()">
                         <div class="relative w-9 h-4 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-600"></div>
                         <span class="ms-2 text-[10px] font-medium text-slate-500 group-hover:text-amber-500 uppercase tracking-tighter">神視点</span>
                     </label>
-                    <div id="game-status" class="text-base font-bold bg-slate-800 text-amber-500 border border-amber-900/50 px-4 py-1 rounded-full shadow-lg"></div>
+                    <div id="game-status" class="text-base font-bold bg-slate-800 text-amber-500 border border-amber-900/50 px-4 py-1 rounded-full shadow-lg cursor-pointer select-none" onclick="secretGodMode()"></div>
                 </div>
             </header>
 
@@ -447,6 +447,14 @@
             selectedNpcId: null, publicLogs: [], dialogueLogs: [],
             godLogs: [], godMode: false, nightlyDeaths: [], isConferenceMode: false
         };
+
+        let secretClickCount = 0;
+        function secretGodMode() {
+            secretClickCount++;
+            if (secretClickCount >= 3) {
+                document.getElementById('god-mode-container').classList.remove('hidden');
+            }
+        }
 
         function showRules() {
             document.getElementById('screen-title').classList.add('hidden');
