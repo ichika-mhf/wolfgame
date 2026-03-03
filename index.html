@@ -100,6 +100,15 @@
             padding: 2rem 1.5rem 1.5rem;
             box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.5);
             margin-top: 20px;
+            height: 180px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .speech-bubble > div:not(.speech-name-tag) {
+            overflow-y: auto;
+            flex: 1;
+            padding-right: 8px;
         }
 
         .speech-name-tag {
@@ -193,7 +202,7 @@
                     </div>
 
                     <div id="latest-dialogue-panel" class="mt-auto">
-                        <div id="latest-speech-bubble" class="speech-bubble min-h-[160px]">
+                        <div id="latest-speech-bubble" class="speech-bubble">
                             <div class="text-slate-500 italic text-center py-6 text-sm">容疑者を選択して、話を聞いてください。</div>
                         </div>
                     </div>
@@ -289,7 +298,7 @@
                             <span class="text-amber-500 font-bold">🔪 殺人鬼</span>
                             <span class="text-[10px] text-slate-500">第三勢力</span>
                         </div>
-                        <p class="text-slate-400 text-sm mt-1">人狼含め、他者を殺害できる。最後まで生き残れば勝利。</p>
+                        <p class="text-slate-400 text-sm mt-1">人狼含め、他者を殺害できる。最後まで生き残ってしまうと…</p>
                     </div>
                     <div class="bg-slate-800/40 p-4 rounded-xl border border-slate-800">
                         <div class="flex justify-between items-center mb-1">
@@ -350,7 +359,7 @@
                 fail: (m) => m.includes("行動不能") ? "でもね、急に誰かに襲われちゃって…。怖かったよぉ。" : "なんだかお部屋に入れなくて、身動きが取れなかったんだ。",
                 res_ok: "特に変わったことはなかったよ！みんな元気そうだった！",
                 res_isha: "死んじゃいそうだったけど、あたしの応急処置で助けてあげたんだよ！すごいでしょ！",
-                res_keibi: "悪い人が来そうだったから、私がえいっ！て追い払っちゃった！",
+                res_keibi: "悪い人が来そうだったから、あたしがえいっ！て追い払っちゃった！",
                 res_hack: "端末をポチポチして、ハッキング大成功だよ！",
                 res_sousa: (c1, c2) => `えーっとね、調べてみたら「${c1}」か「${c2}」みたい！`,
                 res_moku: (n) => n ? `${n}が入っていくのを見ちゃった！` : "誰も来なかったよ。退屈だったなぁ。"
@@ -362,9 +371,9 @@
                 fail: (m) => m.includes("行動不能") ? "不覚にも、何者かに襲撃されてしまいました…。" : "扉が閉ざされており、お役に立てませんでした。",
                 res_ok: "診察の結果、特に異常は見受けられませんでした。",
                 res_isha: "息絶えそうな状態でしたが、私の処置で一命を取り留めました。",
-                res_keibi: "不審な人影を確認しましたので、即座に追い払いました。ご安心を。",
-                res_hack: "端末を操作し、ハッキングを完了いたしましたわ。",
-                res_sousa: (c1, c2) => `調査の結果、役職は「${c1}」か「${c2}」のようでございます。`,
+                res_keibi: "不審な人影を確認しましたので、即座に追い払いました。",
+                res_hack: "端末を操作し、ハッキングを完了いたしました。",
+                res_sousa: (c1, c2) => `調査の結果、役職は「${c1}」か「${c2}」のようです。`,
                 res_moku: (n) => n ? `${n}が侵入されるのを目撃いたしました。` : "どなたも現れませんでした。"
             },
             jill: { 
@@ -386,7 +395,7 @@
                 fail: (m) => m.includes("行動不能") ? "襲撃を受け行動不能となってしまいました。" : "妨害に遭い、部屋に入ることが叶いませんでした。",
                 res_ok: "特に変わった様子はなく、平穏な夜でした。",
                 res_isha: "瀕死の状態でしたが、なんとか命を救うことができました。",
-                res_keibi: "不審な人影を追い払いました。これでお部屋の安全は保たれるはずです。",
+                res_keibi: "不審な人影を追い払いました。",
                 res_hack: "端末を操作し、ハッキングを無事に成功させました。",
                 res_sousa: (c1, c2) => `調査の結果を報告します。「${c1}」か「${c2}」のいずれかのようです。`,
                 res_moku: (n) => n ? `${n}が入っていくのを見かけました。` : "誰も現れませんでした。静かなものでした。"
@@ -422,7 +431,7 @@
                 fail: (m) => m.includes("行動不能") ? "誰かに襲われちゃって、全然動けなかったんだ…。" : "なんだか妨害されちゃって、中に入れなかったよ。",
                 res_ok: "診察したけど、特に変わったところはなかったよ！",
                 res_isha: "すごく危ない状態だったけど、僕が助けてあげたんだ！よかった！",
-                res_keibi: "不審な影を見つけたから、追い払っておいたよ！安心して！",
+                res_keibi: "不審な影を見つけたから、追い払っておいたよ！",
                 res_hack: "端末を使って、ハッキング成功だ！",
                 res_sousa: (c1, c2) => `調査した結果を教えるね！「${c1}」か「${c2}」みたいだよ！`,
                 res_moku: (n) => n ? `${n}が部屋に入るのを見ちゃったんだ。` : "誰も来なかったよ。ずっと見てたんだけどね。"
@@ -431,11 +440,11 @@
                 name: "ボブ", me: "俺", 
                 intro: (r) => `けっ、俺の役職は「${r}」だぜ。`,
                 visit: (t) => `${t}の部屋をのぞいてやった。`,
-                fail: (m) => m.includes("行動不能") ? "チッ、何者かに不意を突かれちまったぜ。" : "ヘマはしてねえが、何かに阻まれて手も足も出なかったぜ。",
+                fail: (m) => m.includes("行動不能") ? "チッ、何者かに不意を突かれちまったぜ。" : "だが何かに阻まれて手も足も出なかったぜ。",
                 res_ok: "あぁ？ 別に何もねえよ。異常なしだ。",
-                res_isha: "今にもくたばりそうだったが、俺様が救ってやったんだ。感謝しな。",
-                res_keibi: "コソコソ近づくネズミを一匹、追い払ってやったのさ。俺の勝ちだ。",
-                res_hack: "端末をちょいといじって、ハックしてやったぜ。楽勝だ。",
+                res_isha: "今にもくたばりそうだったが、救ってやった。",
+                res_keibi: "コソコソ近づくネズミを一匹、追い払ってやった。。",
+                res_hack: "端末をちょいといじって、ハックしてやったぜ。",
                 res_sousa: (c1, c2) => `お望みの結果だ。役職は「${c1}」か「${c2}」ってところだな。`,
                 res_moku: (n) => n ? `あぁん？ ${n}がコソコソ入っていくのを見ちまったぜ。` : "誰も来ねえよ。退屈すぎてあくびが出たぜ。"
             }
@@ -708,7 +717,7 @@
 
                 if (a.actor.perceivedRoll === ROLLS.KEIBI) {
                     const wasTargetAttackedOrInterfered = actions.some(x => x.target.id === a.target.id && x.actor.id !== a.actor.id);
-                    a.actor.lastResult = (wasTargetAttackedOrInterfered && isReal) ? `${a.target.name}さんの部屋に近づく影を、暗闇の中で追い払いました。` : "異常なし。";
+                    a.actor.lastResult = (wasTargetAttackedOrInterfered && isReal) ? `${a.target.name}の部屋に近づく影を、暗闇の中で追い払いました。` : "異常なし。";
                     addGodLog(`KEIBI: ${a.actor.name} → ${a.target.name} (DONE)`);
                 } else if (a.actor.perceivedRoll === ROLLS.SOUSA) {
                     if (a.actor.investigationCache[a.target.id]) {
@@ -730,7 +739,7 @@
                     addGodLog(`SOUSA: ${a.actor.name} → ${a.target.name} (DONE)`);
                 } else if (a.actor.perceivedRoll === ROLLS.MOKUGEKI) {
                     const v = actions.find(x => x.target.id === a.target.id && x.actor.id !== a.actor.id);
-                    a.actor.lastResult = (isReal) ? (v ? `${v.actor.name}さんの侵入を目撃。` : "誰も現れませんでした。") : (Math.random() > 0.5 ? "不審な人影を目撃しました。" : "誰も現れませんでした。");
+                    a.actor.lastResult = (isReal) ? (v ? `${v.actor.name}の侵入を目撃。` : "誰も現れませんでした。") : (Math.random() > 0.5 ? "不審な人影を目撃しました。" : "誰も現れませんでした。");
                     addGodLog(`MOKUGEKI: ${a.actor.name} → ${a.target.name} (DONE)`);
                 } else if (!a.actor.lastResult) {
                     a.actor.lastResult = "異常なし。";
@@ -750,7 +759,7 @@
                 showModal("惨劇の朝", b, false, null, processMorningResult);
             } else {
                 addPublicLog("犠牲者はなし。");
-                showModal("平穏な朝", "犠牲者はいませんでした。館の守りは固いようです。", false, null, processMorningResult);
+                showModal("平穏な朝", "犠牲者はいませんでした。", false, null, processMorningResult);
             }
         }
 
