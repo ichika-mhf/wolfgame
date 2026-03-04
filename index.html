@@ -843,7 +843,17 @@
             addPublicLog(msg);
             
             updateUI(); 
-            showModal("終局", msg + "\n\n館の住人たちの正体が明かされました。"); 
+
+            // 特殊演出の条件チェック
+            let specialImg = null;
+            if (msg.includes("【敗北】")) {
+                const jill = state.npcs.find(n => n.name === "ジル");
+                if (jill && !jill.isDead && (jill.side === SIDE.JINRO || jill.actualRoll === ROLLS.SATSujIN)) {
+                    specialImg = "img/Jill_end_01.jpg";
+                }
+            }
+
+            showModal("終局", msg + "\n\n館の住人たちの正体が明かされました。", false, null, null, specialImg); 
         }
 
         function updateUI() {
@@ -918,16 +928,20 @@
         function createButton(txt, click, cls) { const b = document.createElement('button'); b.className = `btn-action w-full rounded-2xl font-bold text-white transition-all ${cls}`; b.innerHTML = txt; b.onclick = (e) => { e.stopPropagation(); click(); }; return b; }
         function getPhaseName() { switch(state.phase) { case 'NIGHT': return '🌙 夜'; case 'MORNING': return '☀️ 朝'; case 'DAY': return '☀️ 昼'; default: return ''; } }
 
-        function showModal(title, body, nextNight = false, victim = null, callback = null) {
+        function showModal(title, body, nextNight = false, victim = null, callback = null, specialImage = null) {
             document.getElementById('modal-title').textContent = title;
             document.getElementById('modal-body').textContent = body;
             const reveal = document.getElementById('modal-reveal-area');
             const imgC = document.getElementById('modal-image-container');
             reveal.innerHTML = ''; imgC.innerHTML = '';
-            if (victim) {
+            
+            if (specialImage) {
+                imgC.innerHTML = `<img src="${specialImage}" class="w-full max-h-[50vh] object-contain rounded-xl shadow-2xl mb-6 border border-amber-500/30">`;
+            } else if (victim) {
                 imgC.innerHTML = `<img src="${victim.image}" class="w-24 h-24 rounded-full border-4 border-amber-500 mb-4 mx-auto">`;
                 setTimeout(() => { reveal.innerHTML = `<div class="reveal-role text-2xl">【役職】${victim.actualRoll}</div><div class="reveal-side text-lg">【勢力】${victim.side}</div>`; }, 700);
             }
+            
             document.getElementById('modal-close-btn').onclick = () => { closeModal(); if (callback) callback(); if (nextNight) { if (!checkGameEnd()) { state.day++; processNight(); } } };
             document.getElementById('modal').classList.remove('hidden');
         }
